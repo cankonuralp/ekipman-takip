@@ -940,10 +940,9 @@ body.has-company-band .topbar{ padding-top:10px; }
 .cs-item.active{background:linear-gradient(135deg,rgba(99,102,241,.14),rgba(139,92,246,.14));border:1px solid rgba(99,102,241,.3)}
 /* Panel açıkken ana içeriği panelden sonra SOLA HİZALA + genişlet (sağ boşluk minimumda) */
 @media(min-width:1280px){
-  /* Panel açıkken içerik 230px sağa kayar (panelin YANINA gelir, altına/üstüne binmez) */
-  body.has-company-sidebar #app{ padding-left:230px; }
-  body.has-company-sidebar #app .bottom-nav{ left:230px; }
-  /* İçerik panel yanında toparlı dursun (aşırı yayılma yok); panele yakın, sola hizalı */
+  /* Üst bar (topbar) + mor bant TAM GENİŞLİK kalır; sadece İÇERİK (.pages) panelin yanına kayar.
+     Böylece TakipEt logosu en solda, panel üst barın ALTINDA başlar (alt navbar de tam genişlik). */
+  body.has-company-sidebar #app .pages{ padding-left:230px; }
   body.has-company-sidebar #app .container{ max-width:1200px; margin:0; padding-left:28px; padding-right:28px; }
 }
 /* Dar ekranda panel gizli (içeriğe yer kalmıyor) */

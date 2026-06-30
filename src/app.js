@@ -1233,6 +1233,21 @@ function showCompanySidebar(){
     document.body.classList.remove('has-company-sidebar');
   }
   renderCompanySidebar();
+  requestAnimationFrame(positionSidebar);
+}
+/* Paneli üst bar (mor bant + topbar) ALTINA, alt navbar ÜSTÜNE hizala.
+   Topbar tam genişlik kaldığı için panel onun altından başlamalı. */
+function positionSidebar(){
+  const sb=document.getElementById('company-sidebar');
+  if(!sb || sb.style.display==='none') return;
+  const band=document.getElementById('super-company-band');
+  const topbar=document.querySelector('#app .topbar');
+  const nav=document.querySelector('#app .bottom-nav');
+  let top=0;
+  if(band && band.style.display!=='none' && band.offsetParent!==null) top+=band.offsetHeight;
+  if(topbar) top+=topbar.offsetHeight;
+  if(top>0) sb.style.top=top+'px';
+  sb.style.bottom=(nav?nav.offsetHeight:0)+'px';
 }
 function hideCompanySidebar(){
   const sb=document.getElementById('company-sidebar');
@@ -3213,6 +3228,7 @@ function updateCompanyBanner(){
     document.body.classList.remove('has-company-band');
     if(band) band.style.display='none';
   }
+  requestAnimationFrame(positionSidebar);
 }
 
 /* ══════════════════════════════════════
