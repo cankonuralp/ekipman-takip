@@ -1485,10 +1485,14 @@ async function openGlobalTypeManager(){
   if(!S.companies.length){ toast('⚠️ Önce en az bir şirket oluşturun'); return; }
   let cid=S.activeCompanyId;
   if(!cid){
+    // Aktif şirket yok → ilk şirkete TAM geçiş yap (companies-screen gizlenir, #app gösterilir).
     cid=S.companies[0].id;
-    await switchToCompany(cid);
-    await new Promise(r=>setTimeout(r,500));
+    await enterCompany(cid);
   }
+  // Garanti: şirketler ekranı kapalı, ana uygulama açık olsun (Türler boş ekran bug fix).
+  document.getElementById('companies-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  showCompanySidebar();
   _globalTypeMode=true;
   showPage('equipments');
   setTimeout(()=>{

@@ -954,12 +954,12 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
 /* ── SÜPER ADMIN SABİT ŞİRKET KOLONU ── */
 /* ── SÜPER ADMIN ŞİRKET PANELİ (sol kenar, topbar altı, boydan boya) ── */
 #company-sidebar{
-  position:fixed; left:0; top:64px; bottom:0; width:230px; z-index:45;
+  position:fixed; left:0; top:0; bottom:0; width:230px; z-index:60;
   background:var(--card); border-right:1px solid var(--brd);
   display:flex; flex-direction:column; overflow:hidden;
 }
 #company-sidebar .cs-header{
-  padding:14px 14px; border-bottom:1px solid var(--brd);
+  padding:calc(13px + env(safe-area-inset-top)) 14px 13px; border-bottom:1px solid var(--brd);
   display:flex; align-items:center; justify-content:space-between; flex-shrink:0;
 }
 .cs-item{display:flex;align-items:center;gap:9px;padding:10px 11px;border-radius:9px;cursor:pointer;transition:background .12s;margin-bottom:3px}
@@ -3540,10 +3540,14 @@ async function openGlobalTypeManager(){
   if(!S.companies.length){ toast('⚠️ Önce en az bir şirket oluşturun'); return; }
   let cid=S.activeCompanyId;
   if(!cid){
+    // Aktif şirket yok → ilk şirkete TAM geçiş yap (companies-screen gizlenir, #app gösterilir).
     cid=S.companies[0].id;
-    await switchToCompany(cid);
-    await new Promise(r=>setTimeout(r,500));
+    await enterCompany(cid);
   }
+  // Garanti: şirketler ekranı kapalı, ana uygulama açık olsun (Türler boş ekran bug fix).
+  document.getElementById('companies-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  showCompanySidebar();
   _globalTypeMode=true;
   showPage('equipments');
   setTimeout(()=>{
