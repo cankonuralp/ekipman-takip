@@ -138,15 +138,13 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
 /* ── TOP BAR ── */
 .topbar{
   position:sticky;top:0;z-index:100;
-  background:rgba(245,247,250,.9);
-  backdrop-filter:blur(20px) saturate(180%);
-  -webkit-backdrop-filter:blur(20px) saturate(180%);
+  background:var(--bg);
   border-bottom:1px solid var(--brd);
   display:flex;align-items:center;justify-content:space-between;
   padding:10px 16px;transition:background var(--dur);
   padding-top:calc(10px + env(safe-area-inset-top));
 }
-[data-theme=dark] .topbar{background:rgba(13,17,23,.9)}
+[data-theme=dark] .topbar{background:#0d1117}
 /* Süper admin şirket bandı varken üst safe-area boşluğunu BANT halleder; topbar tekrarlamasın */
 body.has-company-band .topbar{ padding-top:10px; }
 .topbar-brand{display:flex;align-items:center;gap:8px}
@@ -8001,7 +7999,7 @@ function computeRiskData(){
     const mb=data.byMahal[e.mahalId];
     mb.total++;
     const catName=(catById(e.cat)||{}).name||'—';
-    const item={ name:e.name, cat:catName, mahal:mName, days:st.days, period:st.period };
+    const item={ id:e.id, name:e.name, cat:catName, mahal:mName, days:st.days, period:st.period };
     if(st.state==='overdue'){ data.overdueList.push(item); mb.overdue++; }
     else if(st.state==='never'){ data.neverList.push(item); mb.never++; }
     else if(st.state==='soon'){ data.soonList.push(item); mb.soon++; }
@@ -8044,86 +8042,86 @@ function openRiskAnalysis(){
         <span style="font-size:12px;font-weight:700;color:${riskColor};min-width:54px;text-align:right">${m.risk===0?'✓ temiz':m.risk+' risk'}</span>
       </div>`;
     }).join('');
-  const listSection=(title, items, color, emptyMsg)=>{
+  const listSection=(title, items, color, daysFmt)=>{
     if(!items.length) return '';
     return `<p class="sec-label" style="margin-top:14px;margin-bottom:6px">${title} (${items.length})</p>
-      <div style="background:var(--bg);border:1px solid var(--brd);border-radius:10px;overflow:hidden;max-height:200px;overflow-y:auto">
-        ${items.map(it=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 11px;border-bottom:1px solid var(--brd)">
+      <div style="background:var(--bg);border:1px solid var(--brd);border-radius:10px;overflow:hidden;max-height:220px;overflow-y:auto">
+        ${items.map(it=>`<div onclick="openEquipFromRisk('${it.id}')" style="display:flex;align-items:center;gap:8px;padding:9px 11px;border-bottom:1px solid var(--brd);cursor:pointer">
           <span style="flex:1;font-size:12.5px;color:var(--txt)">${safe(it.name)} <span style="color:var(--txt3);font-size:11px">· ${safe(it.cat)} · ${safe(it.mahal)}</span></span>
-          ${it.days!=null?`<span style="font-size:11px;font-weight:700;color:${color}">${it.days} gün</span>`:''}
+          ${daysFmt&&it.days!=null?`<span style="font-size:11px;font-weight:700;color:${color};white-space:nowrap">${daysFmt(it.days)}</span>`:''}
+          <span style="color:var(--accent);font-size:14px">›</span>
         </div>`).join('')}
       </div>`;
   };
   body.innerHTML=`
+    <p style="font-size:12px;color:var(--txt2);line-height:1.5;margin-bottom:12px;background:var(--bg);border-radius:10px;padding:10px 12px">
+      Ekipmanların <b>denetim durumu</b> özeti. <b>Denetimi Gecikmiş</b> = periyodu geçmiş; <b>Yaklaşan</b> = 7 günden az kalmış; <b>Şu An Uygunsuz</b> = son denetiminde sorun bulunmuş. Aşağıdaki listede bir ekipmana <b>tıklayınca detayına gidilir</b>.
+    </p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
       ${card('Toplam', d.total, 'var(--txt)')}
       ${card('Uygun', d.ok, 'var(--gtxt)', '%'+pct(d.ok))}
-      ${card('Yaklaşan', d.soon, '#ea580c')}
-      ${card('Gecikmiş', d.overdue, 'var(--rtxt)', '%'+pct(d.overdue))}
+      ${card('Denetimi Yaklaşan', d.soon, '#ea580c', '7 günden az')}
+      ${card('Denetimi Gecikmiş', d.overdue, 'var(--rtxt)', '%'+pct(d.overdue))}
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
       ${card('Hiç Denetlenmemiş', d.never, '#6b7280')}
-      ${card('Şu An Uygunsuz', d.failResult, 'var(--rtxt)')}
+      ${card('Şu An Uygunsuz', d.failResult, 'var(--rtxt)', 'son denetim')}
     </div>
     <p class="sec-label" style="margin-top:14px;margin-bottom:6px">Mahal Bazında Risk</p>
     <div style="background:var(--bg);border:1px solid var(--brd);border-radius:10px;overflow:hidden">
       ${mahalRows||'<div style="padding:14px;text-align:center;color:var(--txt3);font-size:12px">Mahal yok</div>'}
     </div>
-    ${listSection('⏰ Gecikmiş Denetimler', d.overdueList, 'var(--rtxt)')}
-    ${listSection('❌ Şu An Uygunsuz', d.failList, 'var(--rtxt)')}
-    ${listSection('🔔 Yaklaşan Denetimler', d.soonList, '#ea580c')}
-    ${listSection('⚪ Hiç Denetlenmemiş', d.neverList, '#6b7280')}
+    ${listSection('⏰ Denetimi Gecikmiş', d.overdueList, 'var(--rtxt)', x=>x+' gün gecikti')}
+    ${listSection('❌ Şu An Uygunsuz', d.failList, 'var(--rtxt)', null)}
+    ${listSection('🔔 Denetimi Yaklaşan', d.soonList, '#ea580c', x=>x+' gün kaldı')}
+    ${listSection('⚪ Hiç Denetlenmemiş', d.neverList, '#6b7280', null)}
     <button class="btn btn-primary btn-full" style="margin-top:16px" onclick="exportRiskPdf()">📄 PDF Olarak İndir</button>`;
   openModal('modal-risk');
 }
 
+/* Risk listesindeki bir ekipmana tıklayınca detayına git (modalı kapat) */
+function openEquipFromRisk(id){
+  closeModal('modal-risk');
+  setTimeout(()=>{ if(equipById(id)) openEquipDetail(id); else toast('⚠️ Ekipman bu şirkette bulunamadı'); }, 250);
+}
+
 /* Risk analizini PDF olarak indir */
-async function exportRiskPdf(){
+/* Risk analizi PDF — ekipman raporlarıyla AYNI güzel HTML çıktısı (showPrintOverlay) */
+function exportRiskPdf(){
   const d=computeRiskData();
-  if(typeof window.jspdf==='undefined'){ toast('⚠️ PDF kütüphanesi yüklenemedi'); return; }
-  const loading=showPersistentToast('📄 PDF hazırlanıyor…');
-  try{
-    const { jsPDF } = window.jspdf;
-    const pdf=new jsPDF({unit:'pt',format:'a4'});
-    const pw=pdf.internal.pageSize.getWidth();
-    let y=50;
-    const company=S.activeCompanyName||S.cur?.companyName||'';
-    pdf.setFontSize(18); pdf.setTextColor(40);
-    pdf.text('Risk Analizi Raporu', 40, y); y+=22;
-    pdf.setFontSize(10); pdf.setTextColor(120);
-    pdf.text((company?company+' · ':'')+new Date().toLocaleDateString('tr-TR'), 40, y); y+=24;
-    // Özet kutusu
-    pdf.setFontSize(11); pdf.setTextColor(40);
-    const summary=[
-      ['Toplam Ekipman', d.total],
-      ['Uygun', d.ok],
-      ['Yaklasan Denetim', d.soon],
-      ['Gecikmis Denetim', d.overdue],
-      ['Hic Denetlenmemis', d.never],
-      ['Su An Uygunsuz', d.failResult],
-    ];
-    summary.forEach(([k,v])=>{ pdf.text(`${k}: ${v}`, 40, y); y+=18; });
-    y+=10;
-    const section=(title, items)=>{
-      if(!items.length) return;
-      if(y>740){ pdf.addPage(); y=50; }
-      pdf.setFontSize(13); pdf.setTextColor(40); pdf.text(title+' ('+items.length+')', 40, y); y+=18;
-      pdf.setFontSize(9); pdf.setTextColor(80);
-      items.forEach(it=>{
-        if(y>800){ pdf.addPage(); y=50; }
-        const line=`• ${it.name} (${it.cat}) - ${it.mahal}`+(it.days!=null?` - ${it.days} gun`:'');
-        pdf.text(line.substring(0,90), 48, y); y+=14;
-      });
-      y+=8;
-    };
-    section('Gecikmis Denetimler', d.overdueList);
-    section('Su An Uygunsuz', d.failList);
-    section('Yaklasan Denetimler', d.soonList);
-    section('Hic Denetlenmemis', d.neverList);
-    pdf.save(`Risk-Analizi-${new Date().toISOString().slice(0,10)}.pdf`);
-    hidePersistentToast(loading);
-    toast('✅ Risk analizi PDF indirildi');
-  }catch(e){ hidePersistentToast(loading); toast('❌ PDF hatası: '+(e.message||''),5000); }
+  const pct=(n)=>d.total?Math.round(n/d.total*100):0;
+  const company=S.activeCompanyName||S.cur?.companyName||'';
+  const sumRow=(k,v,sub)=>`<tr><td>${escapeHtml(k)}</td><td style="text-align:right;font-weight:700">${v}${sub?` <span style="color:#6b7280;font-weight:400">(${sub})</span>`:''}</td></tr>`;
+  const listTable=(title, items, daysFmt)=>{
+    if(!items.length) return '';
+    return `<p class="sec">${escapeHtml(title)} (${items.length})</p>
+      <table><tr><th>Ekipman</th><th>Tür</th><th>Mahal</th>${daysFmt?'<th>Durum</th>':''}</tr>
+        ${items.map(it=>`<tr><td>${escapeHtml(it.name)}</td><td>${escapeHtml(it.cat)}</td><td>${escapeHtml(it.mahal)}</td>${daysFmt?`<td style="font-weight:700">${it.days!=null?escapeHtml(daysFmt(it.days)):'—'}</td>`:''}</tr>`).join('')}
+      </table>`;
+  };
+  const mahalRows=Object.values(d.byMahal).map(m=>({...m, risk:m.overdue+m.never+m.fail})).sort((a,b)=>b.risk-a.risk);
+  const body=`<div class="rpt">
+    <div class="rpt-head"><div><div class="rpt-id">RİSK ANALİZİ</div><div class="rpt-name">${escapeHtml(company||'Şirket')}</div></div>
+    <div class="rpt-badge" style="background:${d.failResult||d.overdue?'#fee2e2':'#dcfce7'};color:${d.failResult||d.overdue?'#7f1d1d':'#14532d'}">${d.failResult||d.overdue?'⚠ RİSK VAR':'✓ TEMİZ'}</div></div>
+    <div class="rpt-meta">${new Date().toLocaleDateString('tr-TR')} · ${d.total} ekipman</div>
+    <p class="sec">Özet</p>
+    <table>
+      ${sumRow('Toplam Ekipman', d.total)}
+      ${sumRow('Uygun', d.ok, '%'+pct(d.ok))}
+      ${sumRow('Denetimi Yaklaşan (7 günden az)', d.soon)}
+      ${sumRow('Denetimi Gecikmiş', d.overdue, '%'+pct(d.overdue))}
+      ${sumRow('Hiç Denetlenmemiş', d.never)}
+      ${sumRow('Şu An Uygunsuz (son denetim)', d.failResult)}
+    </table>
+    ${mahalRows.length?`<p class="sec">Mahal Bazında Risk</p><table><tr><th>Mahal</th><th>Ekipman</th><th>Risk</th></tr>
+      ${mahalRows.map(m=>`<tr><td>${escapeHtml(m.name)}</td><td>${m.total}</td><td style="font-weight:700;color:${m.risk?'#991b1b':'#065f46'}">${m.risk===0?'temiz':m.risk}</td></tr>`).join('')}</table>`:''}
+    ${listTable('Denetimi Gecikmiş', d.overdueList, x=>x+' gün gecikti')}
+    ${listTable('Şu An Uygunsuz', d.failList, null)}
+    ${listTable('Denetimi Yaklaşan', d.soonList, x=>x+' gün kaldı')}
+    ${listTable('Hiç Denetlenmemiş', d.neverList, null)}
+  </div>`;
+  closeModal('modal-risk');
+  showPrintOverlay('Risk Analizi'+(company?' · '+company:''), 'Risk Analizi Raporu', body);
 }
 
 function renderReports(){
