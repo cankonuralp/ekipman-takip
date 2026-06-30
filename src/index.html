@@ -1,0 +1,883 @@
+<body>
+<!-- YÜKLENİYOR -->
+<div id="loading-screen" style="position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+  <div style="width:56px;height:56px;background:rgba(255,255,255,.2);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px">🔍</div>
+  <div style="font-size:20px;font-weight:800;color:#fff">TakipEt</div>
+  <div style="width:40px;height:40px;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite"></div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+</div>
+
+<!-- BAĞLANTI HATASI -->
+<div id="conn-error" style="position:fixed;inset:0;z-index:9998;background:#fef2f2;display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center">
+  <div style="font-size:48px;margin-bottom:16px">📡</div>
+  <h2 style="font-size:20px;font-weight:800;color:#991b1b;margin-bottom:8px">Bağlantı Kurulamadı</h2>
+  <p id="conn-error-msg" style="font-size:14px;color:#b91c1c;margin-bottom:24px;max-width:320px;line-height:1.6"></p>
+  <button id="btn-retry-conn" style="padding:12px 28px;background:#ef4444;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer">↺ Tekrar Dene</button>
+</div>
+
+<!-- GİRİŞ -->
+<div id="login-screen" class="login-screen" style="display:none">
+  <div class="login-card">
+    <div class="login-logo-big"><span class="logo-glass-big">🔍</span></div>
+    <h1 class="login-title"><strong>TakipEt</strong><br/><span>Denetim Sistemi</span></h1>
+    <div class="form-group" style="margin-top:24px">
+      <label class="form-label">KULLANICI ADI</label>
+      <input class="form-input" id="login-user" placeholder="kullanici_adi" autocomplete="username"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">ŞİFRE</label>
+      <div class="pw-wrap">
+        <input class="form-input" id="login-pass" type="password" placeholder="••••••••" autocomplete="current-password"/>
+        <button type="button" class="pw-toggle" data-pw="login-pass" aria-label="Şifreyi göster"></button>
+      </div>
+    </div>
+    <p class="login-error" id="login-error">Kullanıcı adı veya şifre hatalı.</p>
+    <button class="btn btn-primary btn-full" id="btn-login">Giriş Yap →</button>
+    <div class="login-contact" id="login-contact" style="display:none"></div>
+  </div>
+</div>
+
+<!-- SÜPER ADMIN: SABİT ŞİRKET KOLONU (sol) -->
+<div id="company-sidebar" style="display:none">
+  <div class="cs-header">
+    <span style="font-size:15px;font-weight:800;color:var(--txt)">🏢 Şirketler</span>
+  </div>
+  <div style="padding:10px 12px">
+    <input id="switcher-search" class="form-input" placeholder="🔍 Ara…" oninput="renderCompanySidebar()" style="font-size:13px"/>
+  </div>
+  <div id="switcher-list" style="flex:1;overflow-y:auto;padding:2px 8px 10px"></div>
+  <div style="padding:10px 12px;border-top:1px solid var(--brd)">
+    <button class="btn btn-secondary btn-full btn-sm" onclick="exitCompany()">← Tüm Şirketler Ekranı</button>
+  </div>
+</div>
+
+<!-- GLOBAL YÖNETİM MODALI (süper admin) -->
+<div class="modal-ov" id="gmodal">
+  <div class="modal" style="max-width:460px">
+    <button class="modal-x" data-close="gmodal">✕</button>
+    <h2 class="modal-title" id="gmodal-title">Global</h2>
+    <div id="gmodal-body" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<!-- RİSK ANALİZİ MODALI -->
+<div class="modal-ov" id="modal-risk">
+  <div class="modal" style="max-width:560px">
+    <button class="modal-x" data-close="modal-risk">✕</button>
+    <h2 class="modal-title">📈 Risk Analizi</h2>
+    <div id="risk-body" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<!-- SÜPER ADMIN: SİSTEM LOGLARI -->
+<div class="modal-ov" id="modal-super-logs">
+  <div class="modal" style="max-width:480px">
+    <button class="modal-x" data-close="modal-super-logs">✕</button>
+    <h2 class="modal-title">📋 Sistem Logları</h2>
+    <div id="super-logs-body" style="max-height:60vh;overflow-y:auto;margin-top:8px"></div>
+  </div>
+</div>
+
+<!-- SÜPER ADMIN: ŞİRKETLER EKRANI -->
+<div id="companies-screen" style="display:none;position:fixed;inset:0;z-index:9997;background:var(--bg2);overflow-y:auto">
+  <!-- VIEW: ŞİRKETLER -->
+  <div id="gview-companies" class="gview" style="max-width:760px;margin:0 auto;padding:calc(20px + env(safe-area-inset-top)) 18px calc(90px + env(safe-area-inset-bottom))">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:20px">🏢</div>
+        <div>
+          <div style="font-size:18px;font-weight:800;color:var(--txt)">Şirketler</div>
+          <div style="font-size:12px;color:var(--txt3)">Süper Admin Paneli</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="superAdminLogout()">Çıkış</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin:16px 0">
+      <input id="company-search" class="form-input" placeholder="🔍 Şirket ara…" oninput="renderCompaniesScreen()" style="flex:1"/>
+      <button class="btn btn-primary" onclick="promptCreateCompany()" style="white-space:nowrap">+ Yeni Şirket</button>
+    </div>
+    <div id="companies-total" style="margin-bottom:14px"></div>
+    <!-- Yedekleme kısayolu -->
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="openBackupManager()">💾 Yedekleme & Geri Yükleme</button>
+      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="openSuperLogs()">📋 Sistem Logları</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="openErrorLogs()">🔴 Hata Kayıtları</button>
+    </div>
+    <!-- Genel Evraklar (belge ağacı) -->
+    <div id="global-docs-wrap" style="margin-bottom:16px"></div>
+    <div id="companies-list"></div>
+  </div>
+
+  <!-- VIEW: RAPORLAR (tüm şirketler) -->
+  <div id="gview-reports" class="gview" style="display:none;max-width:760px;margin:0 auto;padding:calc(20px + env(safe-area-inset-top)) 18px calc(90px + env(safe-area-inset-bottom))">
+    <div style="font-size:18px;font-weight:800;color:var(--txt);margin-bottom:4px">📑 Tüm Raporlar</div>
+    <div style="font-size:12px;color:var(--txt3);margin-bottom:14px">Tüm şirketlerin denetim raporları</div>
+    <div id="greports-list"></div>
+  </div>
+
+  <!-- VIEW: PROFİL / GLOBAL YÖNETİM -->
+  <div id="gview-profile" class="gview" style="display:none;max-width:760px;margin:0 auto;padding:calc(20px + env(safe-area-inset-top)) 18px calc(90px + env(safe-area-inset-bottom))">
+    <div style="font-size:18px;font-weight:800;color:var(--txt);margin-bottom:4px">👤 Global Yönetim</div>
+    <div style="font-size:12px;color:var(--txt3);margin-bottom:14px">Tüm sistemi yönet</div>
+    <div id="gprofile-body"></div>
+  </div>
+
+  <!-- Yeni şirket modalı (şirket ekranının kendi içinde — z-index sorunu olmasın) -->
+  <div id="cc-modal" style="display:none;position:fixed;inset:0;z-index:11000;background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--card);border-radius:18px;padding:22px;max-width:380px;width:100%">
+      <h2 style="font-size:18px;font-weight:800;color:var(--txt);margin:0 0 6px">🏢 Yeni Şirket</h2>
+      <p style="font-size:13px;color:var(--txt2);margin:0 0 14px">Şirket / firma adı girin:</p>
+      <input id="cc-name" class="form-input" placeholder="örn: Statorack Otelcilik" style="margin-bottom:16px" autocomplete="off"/>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" id="cc-ok" style="flex:1">Oluştur</button>
+        <button class="btn btn-secondary" id="cc-cancel" style="flex:1">Vazgeç</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GLOBAL NAVBAR (tüm şirketleri kapsar — şirket-içi navbar'dan FARKLI ikonlar) -->
+  <nav class="bottom-nav global-nav">
+    <button class="nav-btn active" onclick="globalNav('companies')" data-gnav="companies">
+      <span class="nav-ico"><svg viewBox="0 0 28 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 11 6 7.5 10 11"/><path d="M3.2 10v6.5h5.6V10"/><path d="M11 11 15 7.5 19 11"/><path d="M12.2 10v6.5h5.6V10"/><path d="M20 11 24 7.5 28 11" transform="translate(-2,0)"/><path d="M19.2 10v6.5h5.6V10"/></svg></span>
+      <span class="nav-lbl">Şirketler</span>
+    </button>
+    <button class="nav-btn" onclick="globalNav('types')" data-gnav="types">
+      <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.3"/><circle cx="14" cy="6" r="2.3"/><circle cx="6" cy="14" r="2.3"/><circle cx="14" cy="14" r="2.3"/><path d="M19.5 11.5v5M17 14h5"/></svg></span>
+      <span class="nav-lbl">Türler</span>
+    </button>
+    <button class="nav-btn" onclick="globalNav('qr')" data-gnav="qr">
+      <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M11 11h2v2h-2z"/></svg></span>
+      <span class="nav-lbl">QR Okut</span>
+    </button>
+    <button class="nav-btn" onclick="globalNav('reports')" data-gnav="reports">
+      <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h7l3 3v3"/><path d="M5 4v13h6"/><rect x="11" y="11" width="9" height="9" rx="1.5"/><path d="M14 14.5h3M14 17h3"/></svg></span>
+      <span class="nav-lbl">Raporlar</span>
+    </button>
+    <button class="nav-btn" onclick="globalNav('profile')" data-gnav="profile">
+      <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.3"/><path d="M3 19v-1a5 5 0 0 1 5-5h2a5 5 0 0 1 5 5v1"/><path d="M16 13.5h.5a4 4 0 0 1 4 4V19"/></svg></span>
+      <span class="nav-lbl">Profil</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ANA UYGULAMA -->
+<div id="app" style="display:none">
+
+  <header class="topbar">
+    <div class="topbar-brand">
+      <button class="back-btn-top" id="global-back" style="display:none">←</button>
+      <span class="takipet-logo" id="logo-home-btn">
+        <span class="logo-glass">🔍</span>
+        <span class="logo-text"><strong>Takip</strong>Et</span>
+      </span>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="btn-notif" style="display:none;position:relative"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span id="notif-badge" style="display:none;position:absolute;top:-2px;right:-2px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;align-items:center;justify-content:center;padding:0 3px"></span></button>
+      <button class="icon-btn" id="btn-theme"></button>
+      <div class="avatar-wrap">
+        <button class="avatar-btn" id="btn-avatar">
+          <span class="avatar-circle" id="avatar-letter">A</span>
+        </button>
+        <div class="avatar-menu" id="avatar-menu">
+          <div class="am-header">
+            <div class="am-name" id="am-name">—</div>
+            <div class="am-role" id="am-role">—</div>
+          </div>
+          <button class="am-item" data-go="profile">👤 Profil</button>
+          <div class="am-sep"></div>
+          <button class="am-item am-logout" id="btn-logout">🚪 Çıkış Yap</button>
+        </div>
+      </div>
+    </div>
+  </header>
+  <div class="conn-status cs-online" id="conn-status" style="display:none">🟢 Çevrimiçi</div>
+
+  <main class="pages">
+
+    <!-- ANA SAYFA -->
+    <section class="page active" id="page-home">
+      <div class="container">
+        <div class="home-head">
+          <div>
+            <p class="page-greeting" id="greeting-text">Hoşgeldiniz</p>
+            <p class="page-date" id="greeting-date"></p>
+          </div>
+        </div>
+        <div id="fb-usage-box"></div>
+        <div id="my-incomplete-box"></div>
+        <div class="home-cols">
+          <div class="home-main">
+            <p class="sec-label">Mahaller</p>
+            <div class="mahal-grid" id="mahal-grid"></div>
+            <p class="sec-label" style="margin-top:22px">Bu Ay</p>
+            <div id="home-stats"></div>
+          </div>
+          <div class="home-side">
+            <div id="company-docs-wrap"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MAHAL DETAY -->
+    <section class="page" id="page-mahal">
+      <div class="container">
+        <button class="page-back-btn" onclick="goBack()">← Geri</button>
+        <div class="mahal-detail-hdr" id="mahal-detail-hdr"></div>
+        <div id="mahal-add-equip-wrap" style="display:none;margin-bottom:14px">
+          <button class="btn btn-accent" id="btn-add-equip-mahal" style="width:100%;max-width:320px">➕ Ekipman Ekle</button>
+        </div>
+        <div id="mahal-equip-list"></div>
+      </div>
+    </section>
+
+    <!-- EKİPMANLAR -->
+    <section class="page" id="page-equipments">
+      <div class="container">
+        <div class="page-row">
+          <p class="sec-label" style="margin:0">Ekipmanlar</p>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-sm btn-secondary" id="btn-new-type" style="display:none">🏷️ Yeni Tür</button>
+          </div>
+        </div>
+        <div class="search-wrap">
+          <input class="search-bar" id="search-bar" type="text" placeholder="🔍  Ekipman ara…" autocomplete="off"/>
+          <button type="button" class="search-clear" data-clear="search-bar" aria-label="Temizle">✕</button>
+        </div>
+        <div class="status-filter-row" id="status-filter-row"></div>
+        <div id="due-reminder-box"></div>
+        <div id="cat-equip-list"></div>
+      </div>
+    </section>
+
+    <!-- EKİPMAN DETAY -->
+    <section class="page" id="page-equip-detail">
+      <div class="container" id="equip-detail-container"></div>
+    </section>
+
+    <!-- TÜP FORMU -->
+    <section class="page" id="page-tup">
+      <div class="container">
+        <h2 class="page-title" id="tup-title">🧯 Tüp Denetimi</h2>
+        <div id="tup-body"></div>
+      </div>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section class="page" id="page-dashboard">
+      <div class="container" id="dashboard-container"></div>
+    </section>
+
+    <!-- BİLDİRİMLER -->
+    <section class="page" id="page-notifications">
+      <div class="container" id="notif-container"></div>
+    </section>
+
+    <!-- RAPORLAR -->
+    <section class="page" id="page-reports">
+      <div class="container">
+        <p class="sec-label">Raporlar</p>
+        <div class="search-wrap">
+          <input class="search-bar" id="report-search" type="text" placeholder="🔍  Rapor ara…" autocomplete="off"/>
+          <button type="button" class="search-clear" data-clear="report-search" aria-label="Temizle">✕</button>
+        </div>
+        <div class="filter-chips" id="report-filter-chips"></div>
+        <div class="ed-card" style="margin-bottom:14px">
+          <p style="font-size:13px;font-weight:600;color:var(--txt);margin-bottom:10px">📥 Dışa Aktar</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+            <input type="text" readonly class="form-input" id="report-date-inp" style="flex:1;min-width:140px;cursor:pointer" placeholder="📅 Tarih seç" onclick="openDatePicker('report-date-inp',true,'📅 Rapor Tarihi')"/>
+            <button class="btn btn-primary btn-sm" id="btn-dl-date-reports">🖨️ Seçilen Gün</button>
+            <button class="btn btn-secondary btn-sm" id="btn-dl-all-reports">⬇️ Tüm PDF</button>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+            <button class="btn btn-danger btn-sm" id="btn-dl-date-fails">⚠️ Seçilen Günün Uygunsuzları</button>
+            <button class="btn btn-danger btn-sm" id="btn-dl-all-fails">⚠️ Tüm Uygunsuzlar</button>
+          </div>
+          <p style="font-size:11px;color:var(--txt3);margin-bottom:10px;line-height:1.5">⚠️ "Uygunsuzlar" yalnızca <b>şu an hâlâ uygunsuz</b> olan ekipmanların raporlarını içerir. Sonradan giderilmiş eski uygunsuzluklar dahil edilmez.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button class="btn btn-secondary btn-sm" id="btn-export-excel">📊 Excel (CSV)</button>
+            <button class="btn btn-danger btn-sm" id="btn-mail-fails">📧 Uygunsuzları Mail Gönder</button>
+            <button class="btn btn-secondary btn-sm" id="btn-mail-resolved">✅ Giderilenleri Mail Gönder</button>
+          </div>
+          <div style="border-top:1px solid var(--brd);margin-top:12px;padding-top:12px">
+            <p style="font-size:13px;font-weight:600;color:var(--txt);margin-bottom:4px">📈 Risk Analizi</p>
+            <p style="font-size:11px;color:var(--txt3);margin-bottom:10px;line-height:1.5">Tüm ekipmanların denetim durumu, risk dağılımı ve gecikmiş denetimler. Yönetime sunmak için PDF.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" onclick="openRiskAnalysis()">📈 Risk Analizini Gör</button>
+              <button class="btn btn-secondary btn-sm" onclick="exportRiskPdf()">📄 PDF İndir</button>
+            </div>
+          </div>
+        </div>
+        <div id="report-list"></div>
+      </div>
+    </section>
+
+    <!-- RAPOR DETAY -->
+    <section class="page" id="page-report-detail">
+      <div class="container" id="report-detail-container"></div>
+    </section>
+
+    <!-- PROFİL -->
+    <section class="page" id="page-profile">
+      <div class="container" id="profile-container"></div>
+    </section>
+
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-page="home">
+      <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1V9.5"/></svg></span>
+      <span class="nav-lbl">Ana Sayfa</span>
+    </button>
+    <button class="nav-btn" data-page="equipments">
+      <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.3L3 18v3h3l6.4-6.4a4 4 0 0 0 5.3-5.4l-2.6 2.6-2.1-2.1z"/></svg></span>
+      <span class="nav-lbl">Ekipmanlar</span>
+    </button>
+    <button class="nav-btn" id="nav-qr-btn">
+      <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M14 21h.01M21 21v-4M17 21h.01"/></svg></span>
+      <span class="nav-lbl">QR Okut</span>
+    </button>
+    <button class="nav-btn" data-page="reports">
+      <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg></span>
+      <span class="nav-lbl">Raporlar</span>
+    </button>
+    <button class="nav-btn" data-page="profile">
+      <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg></span>
+      <span class="nav-lbl">Profil</span>
+    </button>
+  </nav>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- MODALLER -->
+<div class="modal-ov" id="modal-scan">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-scan">✕</button>
+    <h2 class="modal-title">📷 QR Kod Okut</h2>
+    <div class="tabs">
+      <button class="tab active" data-tab="camera">Kamera</button>
+      <button class="tab" data-tab="file">Dosya</button>
+      <button class="tab" data-tab="manual">Manuel</button>
+    </div>
+    <div class="tab-panel active" id="tab-camera">
+      <div class="cam-wrap">
+        <video id="qr-video" autoplay muted playsinline></video>
+        <canvas id="qr-canvas" hidden></canvas>
+        <div class="scan-line"></div>
+        <div class="sc tl"></div><div class="sc tr"></div><div class="sc bl"></div><div class="sc br"></div>
+      </div>
+      <p class="cam-hint" id="cam-hint">Başlatmak için butona basın.</p>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-primary" id="btn-cam-start">🎥 Başlat</button>
+        <button class="btn btn-secondary" id="btn-cam-stop" disabled>⛔ Durdur</button>
+      </div>
+    </div>
+    <div class="tab-panel" id="tab-file">
+      <label class="drop-zone" for="qr-file">
+        <span style="font-size:36px">🖼️</span><span>QR içeren resim seçin</span>
+        <input type="file" id="qr-file" accept="image/*" hidden/>
+      </label>
+      <p class="cam-hint" id="file-hint"></p>
+    </div>
+    <div class="tab-panel" id="tab-manual">
+      <div class="form-group">
+        <label class="form-label">EKİPMAN ID</label>
+        <input class="form-input" id="manual-qr-inp" placeholder="eq-…"/>
+      </div>
+      <button class="btn btn-primary btn-full" id="btn-manual-find">🔍 Bul</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-ov" id="modal-add-mahal">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-add-mahal">✕</button>
+    <h2 class="modal-title">🏨 Yeni Mahal</h2>
+    <div class="form-group"><label class="form-label">MAHAL ADI</label><input class="form-input" id="inp-mahal-name" placeholder="Örn: Belek Otel"/></div>
+    <div class="form-group"><label class="form-label">AÇIKLAMA</label><input class="form-input" id="inp-mahal-desc" placeholder="İsteğe bağlı…"/></div>
+    <div class="form-group"><label class="form-label">İKON</label>
+      <div id="add-mahal-icons" class="icon-picker"></div>
+    </div>
+    <button class="btn btn-primary btn-full" id="btn-save-mahal">✅ Kaydet</button>
+  </div>
+</div>
+
+<div class="modal-ov" id="modal-edit-mahal">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-edit-mahal">✕</button>
+    <h2 class="modal-title">✏️ Mahali Düzenle</h2>
+    <div class="form-group"><label class="form-label">MAHAL ADI</label><input class="form-input" id="edit-mahal-name"/></div>
+    <div class="form-group"><label class="form-label">AÇIKLAMA</label><input class="form-input" id="edit-mahal-desc"/></div>
+    <div class="form-group"><label class="form-label">İKON</label>
+      <div id="edit-mahal-icons" class="icon-picker"></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" id="btn-save-edit-mahal">💾 Kaydet</button>
+      <button class="btn btn-danger btn-sm" id="btn-del-mahal">🗑️ Sil</button>
+    </div>
+    <button class="btn btn-secondary btn-full" id="btn-copy-mahal" style="margin-top:10px">📋 Bu Mahali Kopyala (ekipmanlarıyla)</button>
+  </div>
+</div>
+
+<div class="modal-ov" id="modal-add-equip">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-add-equip">✕</button>
+    <h2 class="modal-title">🔧 Yeni Ekipman</h2>
+    <div id="add-equip-form-body">
+      <div class="form-group"><label class="form-label">EKİPMAN ADI</label><input class="form-input" id="inp-equip-name" placeholder="Örn: Kazan No.1" autocomplete="off"/></div>
+      <div class="form-group"><label class="form-label">MAHAL</label><select class="form-select" id="inp-equip-mahal"></select></div>
+      <div class="form-group"><label class="form-label">KATEGORİ</label><select class="form-select" id="inp-equip-cat"></select></div>
+      <div class="form-group"><label class="form-label">AÇIKLAMA</label><textarea class="form-textarea" id="inp-equip-desc" placeholder="Konum, marka, model…"></textarea></div>
+      <div class="form-group"><label class="form-label">KONTROL PERİYODU</label>
+        <select class="form-select" id="inp-equip-period">
+          <option value="">Kategori varsayılanı</option>
+          <option value="7">Haftada 1</option>
+          <option value="14">2 Haftada 1</option>
+          <option value="30">Ayda 1</option>
+          <option value="90">3 Ayda 1</option>
+          <option value="180">6 Ayda 1</option>
+          <option value="365">Yılda 1</option>
+          <option value="custom">Özel (gün gir)…</option>
+          <option value="0">Periyot Yok</option>
+        </select>
+        <input class="form-input" id="inp-equip-period-custom" type="number" placeholder="Kaç günde bir?" style="display:none;margin-top:8px"/>
+      </div>
+      <div style="border:1px solid var(--brd);border-radius:12px;margin-bottom:14px;overflow:hidden">
+        <div onclick="toggleMaintBox('add-maint-content','add-maint-chev')" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px;cursor:pointer;background:var(--bg)">
+          <span class="form-label" style="margin:0">🔧 BAKIM TARİHİ VE BİLGİLERİ <span style="font-weight:400;text-transform:none;color:var(--txt3);font-size:11px">(dış kaynaklı — opsiyonel)</span></span>
+          <span id="add-maint-chev" style="color:var(--txt3);transition:transform .2s;font-size:13px">▾</span>
+        </div>
+        <div id="add-maint-content" style="display:none;padding:0 12px 12px">
+          <input class="form-input" id="inp-equip-maint-date" type="text" readonly style="margin:8px 0;cursor:pointer" placeholder="📅 Bakım tarihi seç" onclick="openDatePicker('inp-equip-maint-date',true,'🔧 Bakım Tarihi')"/>
+          <input class="form-input" id="inp-equip-maint-firm" placeholder="Bakım firması / yetkili (opsiyonel)" style="margin-bottom:8px" autocomplete="off"/>
+          <textarea class="form-textarea" id="inp-equip-maint-note" placeholder="Bakım notu / detay (opsiyonel)" style="margin-bottom:8px"></textarea>
+          <label class="form-label" style="font-size:11px">KAÇ GÜN ÖNCE UYARI?</label>
+          <input class="form-input" id="inp-equip-maint-warn" type="number" value="15" placeholder="15"/>
+          <p style="font-size:11px;color:var(--txt3);margin-top:6px;line-height:1.4">Bakım tarihi yaklaşınca (varsayılan 15 gün önce) yetkili kişilere uyarı gider.</p>
+        </div>
+      </div>
+      <div id="add-form-preview" style="background:var(--card);border:1px solid var(--brd);border-radius:12px;padding:12px;margin-top:6px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+          <span style="font-size:12px;font-weight:700;color:var(--txt2)">📋 DENETİM FORMU</span>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-add-edit-catform" style="font-size:11px;padding:4px 10px">🛠️ Formu Düzenle</button>
+        </div>
+        <div id="add-form-fields" style="font-size:12.5px;color:var(--txt2)"></div>
+      </div>
+      <div style="margin-top:20px"><button class="btn btn-primary btn-full" id="btn-save-equip">✅ Kaydet</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-ov" id="modal-edit-equip">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-edit-equip">✕</button>
+    <h2 class="modal-title">✏️ Ekipmanı Düzenle</h2>
+    <div class="form-group"><label class="form-label">EKİPMAN ADI</label><input class="form-input" id="edit-equip-name" autocomplete="off"/></div>
+    <div class="form-group"><label class="form-label">MAHAL</label><select class="form-select" id="edit-equip-mahal"></select></div>
+    <div class="form-group"><label class="form-label">KATEGORİ</label><select class="form-select" id="edit-equip-cat"></select></div>
+    <div class="form-group"><label class="form-label">AÇIKLAMA</label><textarea class="form-textarea" id="edit-equip-desc"></textarea></div>
+    <div class="form-group"><label class="form-label">KONTROL PERİYODU</label>
+      <select class="form-select" id="edit-equip-period">
+        <option value="">Kategori varsayılanı</option>
+        <option value="7">Haftada 1</option>
+        <option value="14">2 Haftada 1</option>
+        <option value="30">Ayda 1</option>
+        <option value="90">3 Ayda 1</option>
+        <option value="180">6 Ayda 1</option>
+        <option value="365">Yılda 1</option>
+        <option value="custom">Özel (gün gir)…</option>
+        <option value="0">Periyot Yok</option>
+      </select>
+      <input class="form-input" id="edit-equip-period-custom" type="number" placeholder="Kaç günde bir?" style="display:none;margin-top:8px"/>
+    </div>
+    <div class="form-group" style="border:1px solid var(--brd);border-radius:12px;overflow:hidden;padding:0">
+      <div onclick="toggleMaintBox('edit-maint-content','edit-maint-chev')" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px;cursor:pointer;background:var(--bg)">
+        <span class="form-label" style="margin:0">🔧 BAKIM TARİHİ VE BİLGİLERİ <span style="font-weight:400;text-transform:none;color:var(--txt3);font-size:11px">(dış kaynaklı — opsiyonel)</span></span>
+        <span id="edit-maint-chev" style="color:var(--txt3);transition:transform .2s;font-size:13px">▾</span>
+      </div>
+      <div id="edit-maint-content" style="display:none;padding:0 12px 12px">
+        <input class="form-input" id="edit-equip-maint-date" type="text" readonly style="margin:8px 0;cursor:pointer" placeholder="📅 Bakım tarihi seç" onclick="openDatePicker('edit-equip-maint-date',true,'🔧 Bakım Tarihi')"/>
+        <input class="form-input" id="edit-equip-maint-firm" placeholder="Bakım firması / yetkili (opsiyonel)" style="margin-bottom:8px" autocomplete="off"/>
+        <textarea class="form-textarea" id="edit-equip-maint-note" placeholder="Bakım notu / detay (opsiyonel)" style="margin-bottom:8px"></textarea>
+        <label class="form-label" style="font-size:11px">KAÇ GÜN ÖNCE UYARI?</label>
+        <input class="form-input" id="edit-equip-maint-warn" type="number" placeholder="15"/>
+        <p style="font-size:11px;color:var(--txt3);margin-top:6px;line-height:1.4">Bakım tarihi yaklaşınca yetkili kişilere uyarı gider.</p>
+      </div>
+    </div>
+    <div class="form-group" style="display:none"><label class="form-label">GÖRSEL URL</label><input class="form-input" id="edit-equip-img-url" type="url" placeholder="https://…"/></div>
+    <p class="sec-label">DENETİM FORMU</p>
+    <p style="font-size:12px;color:var(--txt2);margin-bottom:10px;line-height:1.5">Bu ekipmanın denetim formunu (alanlar, tablolar) düzenle.</p>
+    <button class="btn btn-secondary btn-full" id="btn-edit-equip-form" style="margin-bottom:4px">🛠️ Denetim Formunu Düzenle</button>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn btn-primary" style="flex:1" id="btn-save-edit-equip">💾 Kaydet</button>
+      <button class="btn btn-danger btn-sm" id="btn-del-equip">🗑️ Sil</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-ov" id="modal-insp">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-insp">✕</button>
+    <h2 class="modal-title" id="insp-title">🔍 Denetim</h2>
+    <div id="insp-body"></div>
+  </div>
+</div>
+
+<div class="modal-ov" id="modal-qr">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-qr">✕</button>
+    <h2 class="modal-title">📎 QR Kod</h2>
+    <div class="qr-wrap">
+      <div class="qr-box" id="qr-box"></div>
+      <p class="qr-lbl" id="qr-lbl"></p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+        <button class="btn btn-secondary btn-sm" id="btn-dl-qr">⬇️ İndir</button>
+        <button class="btn btn-secondary btn-sm" id="btn-regen-qr">🔄 Yenile</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-ov" id="modal-user-edit">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-user-edit">✕</button>
+    <h2 class="modal-title" id="user-edit-title">👤 Kullanıcı</h2>
+    <div class="form-group"><label class="form-label">KULLANICI ADI</label><input class="form-input" id="ue-uname" autocomplete="off"/></div>
+    <div class="form-group"><label class="form-label">AD SOYAD</label><input class="form-input" id="ue-fname"/></div>
+    <div class="form-group"><label class="form-label">ŞİFRE <span id="ue-pass-hint" style="font-weight:400;text-transform:none;color:var(--txt3);font-size:11px"></span></label><div class="pw-wrap"><input class="form-input" id="ue-pass" type="password" autocomplete="new-password" placeholder="En az 8 karakter, harf+rakam"/><button type="button" class="pw-toggle" data-pw="ue-pass" aria-label="Şifreyi göster"></button></div></div>
+    <div class="form-group"><label class="form-label">ROL</label>
+      <select class="form-select" id="ue-role" onchange="onUeRoleChange()"></select>
+    </div>
+    <div class="form-group" id="ue-perms-group">
+      <label class="form-label">YETKİLER <span style="font-weight:400;text-transform:none;color:var(--txt3);font-size:11px">(bu kişiye özel)</span></label>
+      <div id="ue-perms" class="perm-list"></div>
+      <button type="button" class="btn btn-secondary btn-sm" id="ue-perms-reset" style="margin-top:8px">↺ Rolün varsayılanına dön</button>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" id="btn-save-user">💾 Kaydet</button>
+      <button class="btn btn-danger btn-sm" id="btn-del-user" style="display:none">🗑️ Sil</button>
+    </div>
+  </div>
+</div>
+
+<!-- KOTA AYARI (süper admin) -->
+<div class="modal-ov" id="modal-quota">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-quota">✕</button>
+    <h2 class="modal-title">⚙️ Kota Limitleri</h2>
+    <p style="font-size:12.5px;color:var(--txt2);margin-bottom:16px;line-height:1.5">Veritabanı ve depolama için üst sınır belirle. Bu limite ulaşınca uygulama yeni yükleme/kaydı durdurur (fatura koruması). Alt limit ücretsiz kotadır.</p>
+    <p class="sec-label">🗄️ Veritabanı Kotası</p>
+    <div class="quota-opts" id="quota-db-opts"></div>
+    <p class="sec-label" style="margin-top:16px">📁 Depolama Kotası</p>
+    <div class="quota-opts" id="quota-storage-opts"></div>
+    <button class="btn btn-primary btn-full" id="btn-save-quota" style="margin-top:18px">💾 Kaydet</button>
+  </div>
+</div>
+
+<!-- VERİ ÖMRÜ (otomatik temizlik) -->
+<div class="modal-ov" id="modal-retention">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-retention">✕</button>
+    <h2 class="modal-title">🗓️ Veri Saklama Süreleri</h2>
+    <p style="font-size:12.5px;color:var(--txt2);margin-bottom:16px;line-height:1.5">Kayıtlar bu süre sonunda otomatik silinir (gün cinsinden). Elle silmezseniz sistem temizler. Yarım denetimler asla otomatik silinmez.</p>
+    <div class="form-group">
+      <label class="form-label">📋 RAPORLAR</label>
+      <input class="form-input" id="ret-reports" type="number" min="1" placeholder="365"/>
+      <p style="font-size:11px;color:var(--txt3);margin-top:4px">Varsayılan: 365 gün (1 yıl)</p>
+    </div>
+    <div class="form-group">
+      <label class="form-label">📎 BELGELER <span style="font-weight:400;text-transform:none;color:var(--txt3);font-size:11px">(ileride)</span></label>
+      <input class="form-input" id="ret-documents" type="number" min="1" placeholder="730"/>
+      <p style="font-size:11px;color:var(--txt3);margin-top:4px">Varsayılan: 730 gün (2 yıl)</p>
+    </div>
+    <div class="form-group">
+      <label class="form-label">🔔 BİLDİRİMLER</label>
+      <input class="form-input" id="ret-notifications" type="number" min="1" placeholder="90"/>
+      <p style="font-size:11px;color:var(--txt3);margin-top:4px">Varsayılan: 90 gün (3 ay)</p>
+    </div>
+    <div class="form-group">
+      <label class="form-label">📊 LOG / AKTİVİTE KAYITLARI</label>
+      <input class="form-input" id="ret-logs" type="number" min="1" placeholder="90"/>
+      <p style="font-size:11px;color:var(--txt3);margin-top:4px">Varsayılan: 90 gün (3 ay)</p>
+    </div>
+    <button class="btn btn-primary btn-full" id="btn-save-retention" style="margin-top:8px">💾 Kaydet</button>
+  </div>
+</div>
+
+<!-- ÖZEL TARİH SEÇİCİ (temaya uygun) -->
+<div class="modal-ov" id="modal-datepicker">
+  <div class="modal" style="max-width:340px">
+    <button class="modal-x" data-close="modal-datepicker">✕</button>
+    <h2 class="modal-title" id="dp-title">📅 Tarih Seç</h2>
+    <div style="margin-bottom:12px">
+      <label class="form-label">ELLE GİR (GG.AA.YYYY)</label>
+      <input class="form-input" id="dp-manual" type="text" inputmode="numeric" placeholder="örn: 15.08.2026" autocomplete="off"/>
+    </div>
+    <div class="dp-cal">
+      <div class="dp-head">
+        <button type="button" class="dp-nav" id="dp-prev">‹</button>
+        <span class="dp-month" id="dp-month"></span>
+        <button type="button" class="dp-nav" id="dp-next">›</button>
+      </div>
+      <div class="dp-weekdays">
+        <span>Pt</span><span>Sa</span><span>Ça</span><span>Pe</span><span>Cu</span><span>Ct</span><span>Pz</span>
+      </div>
+      <div class="dp-days" id="dp-days"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-secondary btn-sm" style="flex:1" id="dp-today">Bugün</button>
+      <button class="btn btn-secondary btn-sm" style="flex:1" id="dp-clear">Temizle</button>
+      <button class="btn btn-primary btn-sm" style="flex:1.4" id="dp-ok">Seç</button>
+    </div>
+  </div>
+</div>
+
+<!-- BELGE KAYNAK SEÇİMİ -->
+<div class="modal-ov" id="modal-doc-source">
+  <div class="modal" style="max-width:340px">
+    <button class="modal-x" data-close="modal-doc-source">✕</button>
+    <h2 class="modal-title">📎 Belge Ekle</h2>
+    <p style="font-size:13px;color:var(--txt2);margin-bottom:18px">Nasıl eklemek istersiniz?</p>
+    <button class="btn btn-secondary btn-full" style="margin-bottom:10px;justify-content:flex-start" onclick="docPickFromDevice()">📁 Cihazdan Seç <span style="font-size:11px;color:var(--txt3);margin-left:6px">(PDF veya resim)</span></button>
+    <button class="btn btn-secondary btn-full" style="margin-bottom:10px;justify-content:flex-start" onclick="docTakePhoto()">📷 Fotoğraf Çek <span style="font-size:11px;color:var(--txt3);margin-left:6px">(tek fotoğraf ekle)</span></button>
+    <button class="btn btn-secondary btn-full" style="justify-content:flex-start" onclick="startScanner()">📄 Belge Tarayıcı <span style="font-size:11px;color:var(--txt3);margin-left:6px">(çoklu sayfa → PDF)</span></button>
+  </div>
+</div>
+
+<!-- Gizli fotoğraf çekme input (kamera açar) -->
+<input type="file" id="doc-photo-input" accept="image/*" capture="environment" style="display:none" onchange="onDocFileSelected(event)"/>
+
+<!-- TARAYICI (çoklu sayfa → PDF) -->
+<!-- TAM EKRAN BELGE TARAYICI (profesyonel, önizleme + onay) -->
+<div id="scanner-screen" style="display:none;position:fixed;inset:0;z-index:12000;background:#0a0a0a;flex-direction:column">
+  <!-- Üst bar -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;background:#000;flex-shrink:0">
+    <button onclick="closeScanner()" style="background:rgba(255,255,255,.12);border:none;color:#fff;width:38px;height:38px;border-radius:50%;font-size:18px;cursor:pointer">✕</button>
+    <span id="scanner-title" style="color:#fff;font-size:15px;font-weight:700">Belge Tarayıcı</span>
+    <span id="scanner-count" style="color:#fff;font-size:13px;background:rgba(255,255,255,.12);padding:5px 12px;border-radius:20px;min-width:60px;text-align:center">0 sayfa</span>
+  </div>
+
+  <!-- KAMERA GÖRÜNÜMÜ -->
+  <div id="scanner-camera-view" style="flex:1;display:flex;flex-direction:column;min-height:0">
+    <div style="flex:1;position:relative;overflow:hidden;background:#000;min-height:0">
+      <video id="scanner-video" playsinline autoplay muted style="width:100%;height:100%;object-fit:contain"></video>
+      <!-- Kenar tespit overlay -->
+      <canvas id="scanner-overlay" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
+      <!-- Çekilen son sayfa küçük önizleme -->
+      <div id="scanner-thumb" style="display:none;position:absolute;bottom:16px;left:16px;width:60px;height:80px;border-radius:8px;border:2px solid #fff;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.5)"></div>
+    </div>
+    <!-- Alt kontrol -->
+    <div style="display:flex;align-items:center;justify-content:space-around;padding:18px 16px calc(18px + env(safe-area-inset-bottom));background:#000;flex-shrink:0">
+      <button onclick="pickFromGallery()" style="background:rgba(255,255,255,.12);border:none;color:#fff;width:48px;height:48px;border-radius:50%;font-size:20px;cursor:pointer" title="Galeriden seç">🖼️</button>
+      <button id="scanner-shutter" onclick="captureScanPage()" style="width:72px;height:72px;border-radius:50%;background:#fff;border:4px solid rgba(255,255,255,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s" title="Çek">
+        <span style="width:56px;height:56px;border-radius:50%;background:#fff;border:2px solid #000"></span>
+      </button>
+      <button id="scanner-done" onclick="reviewScanPages()" style="background:var(--accent);border:none;color:#fff;width:48px;height:48px;border-radius:50%;font-size:18px;cursor:pointer;opacity:.4;pointer-events:none" title="Önizleme">→</button>
+    </div>
+  </div>
+
+  <!-- ÖNİZLEME / DÜZENLEME GÖRÜNÜMÜ -->
+  <div id="scanner-review-view" style="display:none;flex:1;flex-direction:column;min-height:0;background:#15171a">
+    <div style="flex:1;overflow-y:auto;padding:16px;min-height:0">
+      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-bottom:14px">Sayfaları kontrol edin. Sıralayın veya silin. Onaylayınca PDF oluşturulur.</p>
+      <div id="scanner-review-pages" style="display:flex;flex-direction:column;gap:12px;max-width:420px;margin:0 auto"></div>
+    </div>
+    <!-- Alt onay -->
+    <div style="display:flex;gap:10px;padding:14px 16px calc(14px + env(safe-area-inset-bottom));background:#000;flex-shrink:0">
+      <button class="btn btn-secondary" style="flex:1" onclick="backToCamera()">← Devam Çek</button>
+      <button class="btn btn-primary" style="flex:1.5" onclick="confirmScanPdf()">✓ PDF Oluştur ve Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<!-- Gizli dosya input -->
+<input type="file" id="doc-file-input" accept="application/pdf,image/*" style="display:none" onchange="onDocFileSelected(event)"/>
+<input type="file" id="global-doc-input" accept="application/pdf,image/*" style="display:none" onchange="onGlobalDocSelected(event)"/>
+<input type="file" id="company-doc-input" accept="application/pdf,image/*" style="display:none" onchange="onCompanyDocSelected(event)"/>
+<input type="file" id="scanner-gallery-input" accept="image/*" multiple style="display:none" onchange="onGalleryPicked(event)"/>
+
+<!-- ROL YETKİLERİ -->
+<div class="modal-ov" id="modal-role-perms">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-role-perms">✕</button>
+    <h2 class="modal-title" id="role-perms-title">🔐 Rol Yetkileri</h2>
+    <p style="font-size:12.5px;color:var(--txt2);margin-bottom:14px;line-height:1.5">Bu rolün varsayılan yetkilerini seç. Değişiklik, bu role sahip tüm kullanıcıları (kişisel yetkisi olmayanları) etkiler.</p>
+    <div id="role-perms-list" class="perm-list"></div>
+    <button class="btn btn-primary btn-full" id="btn-save-role-perms" style="margin-top:14px">💾 Kaydet</button>
+  </div>
+</div>
+
+<!-- ŞİFRE DEĞİŞTİR (kendi) -->
+<div class="modal-ov" id="modal-change-pw">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-change-pw">✕</button>
+    <h2 class="modal-title">🔑 Şifremi Değiştir</h2>
+    <div class="form-group"><label class="form-label">MEVCUT ŞİFRE</label><div class="pw-wrap"><input class="form-input" id="cpw-old" type="password" autocomplete="current-password"/><button type="button" class="pw-toggle" data-pw="cpw-old" aria-label="Şifreyi göster"></button></div></div>
+    <div class="form-group"><label class="form-label">YENİ ŞİFRE</label><div class="pw-wrap"><input class="form-input" id="cpw-new" type="password" autocomplete="new-password" placeholder="En az 8 karakter, harf+rakam"/><button type="button" class="pw-toggle" data-pw="cpw-new" aria-label="Şifreyi göster"></button></div></div>
+    <div class="form-group"><label class="form-label">YENİ ŞİFRE (TEKRAR)</label><div class="pw-wrap"><input class="form-input" id="cpw-new2" type="password" autocomplete="new-password"/><button type="button" class="pw-toggle" data-pw="cpw-new2" aria-label="Şifreyi göster"></button></div></div>
+    <button class="btn btn-primary btn-full" id="btn-save-cpw" style="margin-top:8px">✅ Şifreyi Değiştir</button>
+  </div>
+</div>
+
+<!-- YENİ KATEGORİ (TÜR) EKLE -->
+<div class="modal-ov" id="modal-new-cat">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-new-cat">✕</button>
+    <h2 class="modal-title">➕ Yeni Ekipman Türü</h2>
+    <div class="form-group">
+      <label class="form-label">TÜR ADI</label>
+      <input class="form-input" id="newcat-name" placeholder="Örn: Klima Sistemi" autocomplete="off"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">İKON SEÇ</label>
+      <div id="newcat-icons" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">BAŞLANGIÇ ŞABLONU</label>
+      <select class="form-select" id="newcat-template">
+        <option value="blank">Boş (sıfırdan tasarla)</option>
+        <option value="checklist">✅ Kontrol Listesi (Uygun/Değil maddeleri)</option>
+        <option value="table">▦ Tablolu (tüp/birim listesi gibi)</option>
+        <option value="measure">🔢 Ölçüm (değer + durum)</option>
+      </select>
+      <p style="font-size:11.5px;color:var(--txt3);margin-top:6px">Şablonu sonra istediğin gibi düzenleyebilirsin.</p>
+    </div>
+    <div class="form-group">
+      <label class="form-label">VARSAYILAN KONTROL PERİYODU</label>
+      <select class="form-select" id="newcat-period">
+        <option value="30">Ayda 1</option>
+        <option value="7">Haftada 1</option>
+        <option value="14">2 Haftada 1</option>
+        <option value="90">3 Ayda 1</option>
+        <option value="180">6 Ayda 1</option>
+        <option value="365">Yılda 1</option>
+        <option value="custom">Özel (gün gir)…</option>
+        <option value="0">Periyot Yok</option>
+      </select>
+      <input class="form-input" id="newcat-period-custom" type="number" placeholder="Kaç günde bir?" style="display:none;margin-top:8px"/>
+      <p style="font-size:11.5px;color:var(--txt3);margin-top:6px">Bu türdeki ekipmanların varsayılan denetim sıklığı. Ekipmana özel ayarlanabilir.</p>
+    </div>
+    <button class="btn btn-primary btn-full" id="btn-save-newcat" style="margin-top:8px">✅ Türü Ekle</button>
+  </div>
+</div>
+
+<!-- DENETİM FORM TASARIMCISI -->
+<div class="modal-ov" id="modal-form-designer">
+  <div class="modal modal-wide">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-form-designer">✕</button>
+    <h2 class="modal-title" id="fd-title">🛠️ Denetim Formu</h2>
+    <p style="font-size:12.5px;color:var(--txt2);margin-bottom:14px;line-height:1.5" id="fd-subtitle"></p>
+    <div id="fd-period-box" style="display:none;background:var(--bg);border:1px solid var(--brd);border-radius:12px;padding:12px;margin-bottom:14px">
+      <label class="form-label">VARSAYILAN KONTROL PERİYODU <span style="font-weight:400;text-transform:none;color:var(--txt3);font-size:11px">(bu türdeki ekipmanlar için)</span></label>
+      <select class="form-select" id="fd-period">
+        <option value="7">Haftada 1</option>
+        <option value="14">2 Haftada 1</option>
+        <option value="30">Ayda 1</option>
+        <option value="90">3 Ayda 1</option>
+        <option value="180">6 Ayda 1</option>
+        <option value="365">Yılda 1</option>
+        <option value="custom">Özel (gün gir)…</option>
+        <option value="0">Periyot Yok</option>
+      </select>
+      <input class="form-input" id="fd-period-custom" type="number" placeholder="Kaç günde bir?" style="display:none;margin-top:8px"/>
+      <p style="font-size:11px;color:var(--txt3);margin-top:6px;line-height:1.4">Ekipmanın kendine özel periyodu varsa o geçerli olur, yoksa bu varsayılan kullanılır.</p>
+    </div>
+    <div id="fd-maint-box" style="display:none;border:1px solid var(--brd);border-radius:12px;margin-bottom:14px;overflow:hidden">
+      <div onclick="toggleMaintBox('fd-maint-content','fd-maint-chevron')" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px;cursor:pointer;background:var(--bg)">
+        <span class="form-label" style="margin:0">🔧 VARSAYILAN BAKIM BİLGİLERİ <span style="font-weight:400;text-transform:none;color:var(--txt3);font-size:11px">(bu türdeki ekipmanlar için)</span></span>
+        <span id="fd-maint-chevron" style="color:var(--txt3);transition:transform .2s;font-size:13px">▾</span>
+      </div>
+      <div id="fd-maint-content" style="display:none;padding:0 12px 12px">
+        <input class="form-input" id="fd-maint-date" type="text" readonly style="margin:8px 0;cursor:pointer" placeholder="📅 Bakım tarihi seç" onclick="openDatePicker('fd-maint-date',true,'🔧 Varsayılan Bakım Tarihi')"/>
+        <input class="form-input" id="fd-maint-firm" placeholder="Bakım firması / yetkili (opsiyonel)" style="margin-bottom:8px" autocomplete="off"/>
+        <textarea class="form-textarea" id="fd-maint-note" placeholder="Bakım notu / detay (opsiyonel)" style="margin-bottom:8px"></textarea>
+        <label class="form-label" style="font-size:11px">KAÇ GÜN ÖNCE UYARI?</label>
+        <input class="form-input" id="fd-maint-warn" type="number" value="15" placeholder="15"/>
+        <p style="font-size:11px;color:var(--txt3);margin-top:6px;line-height:1.4">Örn: kombiler genelde aynı gün bakıma girer. Buraya girilen tarih, bu türden YENİ eklenen ekipmanlara varsayılan gelir. Ekipmanın kendisinden değiştirilebilir.</p>
+      </div>
+    </div>
+    <div id="fd-fields"></div>
+    <button class="btn btn-secondary btn-full" id="fd-add-field" style="margin-top:10px">+ Alan Ekle</button>
+    <button class="btn btn-primary btn-full" id="fd-save" style="margin-top:14px">💾 Formu Kaydet</button>
+  </div>
+</div>
+
+<!-- UYGULAMAYI İNDİR -->
+<div class="modal-ov" id="modal-install">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-install">✕</button>
+    <h2 class="modal-title">📲 Uygulamayı İndir</h2>
+    <div id="install-body"></div>
+  </div>
+</div>
+
+<!-- MİSAFİR / İLETİŞİM -->
+<div class="modal-ov" id="modal-guest">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-guest">✕</button>
+    <h2 class="modal-title">📬 İletişim</h2>
+    <div id="guest-body"></div>
+  </div>
+</div>
+
+<!-- BİRİM QR -->
+<div class="modal-ov" id="modal-unit-qr">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-unit-qr">✕</button>
+    <h2 class="modal-title">▦ Birim QR Kodu</h2>
+    <p style="font-size:12.5px;color:var(--txt2);margin-bottom:14px;line-height:1.5">Bu QR'ı ilgili tüpün/birimin üstüne yapıştırın. Personel okuttuğunda otomatik "kontrol edildi" işaretlenir.</p>
+    <div id="unit-qr-box" style="display:flex;justify-content:center;padding:10px;background:#fff;border-radius:12px;margin:0 auto;width:fit-content"></div>
+    <p id="unit-qr-lbl" style="text-align:center;font-size:13px;font-weight:600;color:var(--txt);margin-top:12px"></p>
+    <button class="btn btn-primary btn-full" onclick="downloadUnitQR()" style="margin-top:14px">⬇️ QR'ı İndir</button>
+  </div>
+</div>
+
+<!-- ONAY MODALI (confirm yerine) -->
+<div class="modal-ov confirm-ov" id="modal-confirm">
+  <div class="modal confirm-modal">
+    <div class="confirm-icon">⚠️</div>
+    <h2 class="confirm-title" id="confirm-title">Emin misiniz?</h2>
+    <p class="confirm-msg" id="confirm-msg"></p>
+    <div class="confirm-actions">
+      <button class="btn btn-primary btn-full" id="confirm-ok">Evet</button>
+      <button class="btn btn-secondary btn-full" id="confirm-cancel">Vazgeç</button>
+    </div>
+  </div>
+</div>
+
+<!-- METİN GİRİŞ MODALI (prompt yerine) -->
+<div class="modal-ov confirm-ov" id="modal-prompt">
+  <div class="modal confirm-modal" style="text-align:left">
+    <h2 class="confirm-title" id="prompt-title" style="text-align:center">Giriş</h2>
+    <p class="confirm-msg" id="prompt-msg" style="text-align:center"></p>
+    <textarea class="form-textarea" id="prompt-input" rows="3" style="margin-bottom:16px"></textarea>
+    <div class="confirm-actions">
+      <button class="btn btn-primary btn-full" id="prompt-ok">Tamam</button>
+      <button class="btn btn-secondary btn-full" id="prompt-cancel">Vazgeç</button>
+    </div>
+  </div>
+</div>
+</body>
