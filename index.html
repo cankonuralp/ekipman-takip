@@ -955,9 +955,18 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
 /* ── SÜPER ADMIN ŞİRKET PANELİ (sol kenar, topbar altı, boydan boya) ── */
 #company-sidebar{
   position:fixed; left:0; top:64px; bottom:0; width:230px; z-index:45;
-  background:var(--card); border-right:1px solid var(--brd);
+  background:var(--bg); border-right:1px solid var(--brd);
   display:flex; flex-direction:column; overflow:hidden;
 }
+/* Paneli gizle/aç butonları */
+.cs-toggle{background:none;border:none;cursor:pointer;color:var(--txt3);font-size:18px;line-height:1;padding:4px 6px;border-radius:8px;transition:background .12s}
+.cs-toggle:hover{background:var(--bg2);color:var(--txt)}
+#sidebar-expand-btn{
+  display:none; position:fixed; left:12px; top:74px; z-index:46;
+  width:40px;height:40px;border-radius:10px;border:1px solid var(--brd);
+  background:var(--card);color:var(--txt);font-size:17px;cursor:pointer;
+  align-items:center;justify-content:center;box-shadow:var(--sh1);transition:transform .12s}
+#sidebar-expand-btn:hover{transform:scale(1.06)}
 #company-sidebar .cs-header{
   padding:14px 14px; border-bottom:1px solid var(--brd);
   display:flex; align-items:center; justify-content:space-between; flex-shrink:0;
@@ -967,10 +976,10 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
 .cs-item.active{background:linear-gradient(135deg,rgba(99,102,241,.14),rgba(139,92,246,.14));border:1px solid rgba(99,102,241,.3)}
 /* Panel açıkken ana içeriği panelden sonra SOLA HİZALA + genişlet (sağ boşluk minimumda) */
 @media(min-width:1280px){
-  body.has-company-sidebar #app{ padding-left:230px; }
-  body.has-company-sidebar #app .bottom-nav{ left:230px; }
+  body.has-company-sidebar:not(.sidebar-collapsed) #app{ padding-left:230px; }
+  body.has-company-sidebar:not(.sidebar-collapsed) #app .bottom-nav{ left:230px; }
   /* Panel açıkken içerik panele yaslanıp geniş alana yayılsın (ortalı değil) */
-  body.has-company-sidebar #app .container{ max-width:none; margin:0; padding-left:32px; padding-right:32px; }
+  body.has-company-sidebar:not(.sidebar-collapsed) #app .container{ max-width:none; margin:0; padding-left:32px; padding-right:32px; }
 }
 /* Dar ekranda panel gizli (içeriğe yer kalmıyor) */
 @media(max-width:1279px){
@@ -1073,6 +1082,7 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
 <div id="company-sidebar" style="display:none">
   <div class="cs-header">
     <span style="font-size:15px;font-weight:800;color:var(--txt)">🏢 Şirketler</span>
+    <button class="cs-toggle" onclick="toggleCompanySidebar()" title="Paneli gizle">«</button>
   </div>
   <div style="padding:10px 12px">
     <input id="switcher-search" class="form-input" placeholder="🔍 Ara…" oninput="renderCompanySidebar()" style="font-size:13px"/>
@@ -1082,6 +1092,8 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
     <button class="btn btn-secondary btn-full btn-sm" onclick="exitCompany()">← Tüm Şirketler Ekranı</button>
   </div>
 </div>
+<!-- Panel kapalıyken açma butonu -->
+<button id="sidebar-expand-btn" onclick="toggleCompanySidebar()" title="Şirket panelini aç">»</button>
 
 <!-- GLOBAL YÖNETİM MODALI (süper admin) -->
 <div class="modal-ov" id="gmodal">
@@ -3293,21 +3305,46 @@ function logSuperActivity(type, desc){
 }
 
 /* ── ŞİRKET PANELİ (süper admin, sol kenar sabit) ── */
+// Panelin açık/kapalı tercihi (cihazda hatırlanır)
+const getSidebarCollapsed=()=>{ try{ return localStorage.getItem('te_sidebar_collapsed')==='1'; }catch{ return false; } };
+const setSidebarCollapsed=v=>{ try{ localStorage.setItem('te_sidebar_collapsed', v?'1':'0'); }catch(e){} };
+
 function showCompanySidebar(){
   const sb=document.getElementById('company-sidebar');
   if(sb && window.innerWidth>=1280){
-    sb.style.display='flex';
     document.body.classList.add('has-company-sidebar');
+    const collapsed=getSidebarCollapsed();
+    document.body.classList.toggle('sidebar-collapsed', collapsed);
+    sb.style.display=collapsed?'none':'flex';
   } else {
     if(sb) sb.style.display='none';
     document.body.classList.remove('has-company-sidebar');
+    document.body.classList.remove('sidebar-collapsed');
   }
   renderCompanySidebar();
+  updateSidebarExpandBtn();
 }
 function hideCompanySidebar(){
   const sb=document.getElementById('company-sidebar');
   if(sb) sb.style.display='none';
   document.body.classList.remove('has-company-sidebar');
+  document.body.classList.remove('sidebar-collapsed');
+  updateSidebarExpandBtn();
+}
+/* Paneli aç/kapat (kullanıcı butonla) — tercih hatırlanır */
+function toggleCompanySidebar(){
+  const collapsed=!getSidebarCollapsed();
+  setSidebarCollapsed(collapsed);
+  document.body.classList.toggle('sidebar-collapsed', collapsed);
+  const sb=document.getElementById('company-sidebar');
+  if(sb) sb.style.display=(collapsed||window.innerWidth<1280)?'none':'flex';
+  updateSidebarExpandBtn();
+}
+function updateSidebarExpandBtn(){
+  const btn=document.getElementById('sidebar-expand-btn');
+  if(!btn) return;
+  const b=document.body;
+  btn.style.display=(b.classList.contains('has-company-sidebar')&&b.classList.contains('sidebar-collapsed'))?'flex':'none';
 }
 // Pencere boyutu değişince paneli uyarla (süper admin şirket içindeyse)
 window.addEventListener('resize', ()=>{

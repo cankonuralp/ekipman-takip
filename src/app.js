@@ -1223,21 +1223,46 @@ function logSuperActivity(type, desc){
 }
 
 /* ── ŞİRKET PANELİ (süper admin, sol kenar sabit) ── */
+// Panelin açık/kapalı tercihi (cihazda hatırlanır)
+const getSidebarCollapsed=()=>{ try{ return localStorage.getItem('te_sidebar_collapsed')==='1'; }catch{ return false; } };
+const setSidebarCollapsed=v=>{ try{ localStorage.setItem('te_sidebar_collapsed', v?'1':'0'); }catch(e){} };
+
 function showCompanySidebar(){
   const sb=document.getElementById('company-sidebar');
   if(sb && window.innerWidth>=1280){
-    sb.style.display='flex';
     document.body.classList.add('has-company-sidebar');
+    const collapsed=getSidebarCollapsed();
+    document.body.classList.toggle('sidebar-collapsed', collapsed);
+    sb.style.display=collapsed?'none':'flex';
   } else {
     if(sb) sb.style.display='none';
     document.body.classList.remove('has-company-sidebar');
+    document.body.classList.remove('sidebar-collapsed');
   }
   renderCompanySidebar();
+  updateSidebarExpandBtn();
 }
 function hideCompanySidebar(){
   const sb=document.getElementById('company-sidebar');
   if(sb) sb.style.display='none';
   document.body.classList.remove('has-company-sidebar');
+  document.body.classList.remove('sidebar-collapsed');
+  updateSidebarExpandBtn();
+}
+/* Paneli aç/kapat (kullanıcı butonla) — tercih hatırlanır */
+function toggleCompanySidebar(){
+  const collapsed=!getSidebarCollapsed();
+  setSidebarCollapsed(collapsed);
+  document.body.classList.toggle('sidebar-collapsed', collapsed);
+  const sb=document.getElementById('company-sidebar');
+  if(sb) sb.style.display=(collapsed||window.innerWidth<1280)?'none':'flex';
+  updateSidebarExpandBtn();
+}
+function updateSidebarExpandBtn(){
+  const btn=document.getElementById('sidebar-expand-btn');
+  if(!btn) return;
+  const b=document.body;
+  btn.style.display=(b.classList.contains('has-company-sidebar')&&b.classList.contains('sidebar-collapsed'))?'flex':'none';
 }
 // Pencere boyutu değişince paneli uyarla (süper admin şirket içindeyse)
 window.addEventListener('resize', ()=>{

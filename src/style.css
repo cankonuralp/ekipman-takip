@@ -926,9 +926,18 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
 /* ── SÜPER ADMIN ŞİRKET PANELİ (sol kenar, topbar altı, boydan boya) ── */
 #company-sidebar{
   position:fixed; left:0; top:64px; bottom:0; width:230px; z-index:45;
-  background:var(--card); border-right:1px solid var(--brd);
+  background:var(--bg); border-right:1px solid var(--brd);
   display:flex; flex-direction:column; overflow:hidden;
 }
+/* Paneli gizle/aç butonları */
+.cs-toggle{background:none;border:none;cursor:pointer;color:var(--txt3);font-size:18px;line-height:1;padding:4px 6px;border-radius:8px;transition:background .12s}
+.cs-toggle:hover{background:var(--bg2);color:var(--txt)}
+#sidebar-expand-btn{
+  display:none; position:fixed; left:12px; top:74px; z-index:46;
+  width:40px;height:40px;border-radius:10px;border:1px solid var(--brd);
+  background:var(--card);color:var(--txt);font-size:17px;cursor:pointer;
+  align-items:center;justify-content:center;box-shadow:var(--sh1);transition:transform .12s}
+#sidebar-expand-btn:hover{transform:scale(1.06)}
 #company-sidebar .cs-header{
   padding:14px 14px; border-bottom:1px solid var(--brd);
   display:flex; align-items:center; justify-content:space-between; flex-shrink:0;
@@ -938,10 +947,10 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
 .cs-item.active{background:linear-gradient(135deg,rgba(99,102,241,.14),rgba(139,92,246,.14));border:1px solid rgba(99,102,241,.3)}
 /* Panel açıkken ana içeriği panelden sonra SOLA HİZALA + genişlet (sağ boşluk minimumda) */
 @media(min-width:1280px){
-  body.has-company-sidebar #app{ padding-left:230px; }
-  body.has-company-sidebar #app .bottom-nav{ left:230px; }
+  body.has-company-sidebar:not(.sidebar-collapsed) #app{ padding-left:230px; }
+  body.has-company-sidebar:not(.sidebar-collapsed) #app .bottom-nav{ left:230px; }
   /* Panel açıkken içerik panele yaslanıp geniş alana yayılsın (ortalı değil) */
-  body.has-company-sidebar #app .container{ max-width:none; margin:0; padding-left:32px; padding-right:32px; }
+  body.has-company-sidebar:not(.sidebar-collapsed) #app .container{ max-width:none; margin:0; padding-left:32px; padding-right:32px; }
 }
 /* Dar ekranda panel gizli (içeriğe yer kalmıyor) */
 @media(max-width:1279px){
