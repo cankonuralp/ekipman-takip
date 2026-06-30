@@ -2113,7 +2113,7 @@ function renderCatManageList(){
         <div style="font-size:11px;color:var(--txt3)">${count} ekipman${base?' · varsayılan':''}</div>
       </div>
       <button class="fd-mini" onclick="openEditCat('${c.id}')" title="Ad/ikon düzenle">✏️</button>
-      <button class="fd-mini" onclick="openFormDesigner('${c.id}','${c.name.replace(/'/g,"\\'")}',false)" title="Formu düzenle">🛠️</button>
+      <button class="fd-mini" onclick="openFormDesigner('${c.id}','${jsStr(c.name)}',false)" title="Formu düzenle">🛠️</button>
       ${!base?`<button class="fd-mini fd-del" onclick="deleteCat('${c.id}')" title="Türü sil">🗑️</button>`:''}
     </div>`;
   }).join('');
@@ -2441,7 +2441,12 @@ const uid    = ()=>'eq-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
 const mid    = ()=>'mh-'+Date.now()+'-'+Math.random().toString(36).slice(2,5);
 const rid    = ()=>'RPR-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+Math.random().toString(36).slice(2,5).toUpperCase();
 const nowStr = ()=>new Date().toLocaleString('tr-TR',{hour12:false});
-const safe   = v=>String(v||'').replace(/</g,'&lt;');
+// XSS koruması: HTML metin VE çift-tırnaklı attribute bağlamı için & < > " kaçırılır.
+// ' KAÇIRILMAZ — bazı onclick'ler safe()'i tek-tırnaklı JS string içinde kullanıyor (örn. openGuestContact).
+const safe   = v=>String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// onclick="...'${jsStr(x)}'..." gibi: çift-tırnaklı attribute İÇİNDE tek-tırnaklı JS string'e
+// güvenli gömme. Ters bölü/tek tırnak/çift tırnak/< hepsini kaçırır (isim/metin UI'yi kıramaz).
+const jsStr  = v=>String(v==null?'':v).replace(/\\/g,'\\\\').replace(/'/g,'\\x27').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 const toArr  = v=>!v?[]:(Array.isArray(v)?v:Object.values(v));
 
 const allCats   = ()=>CATS;
@@ -5529,55 +5534,6 @@ async function saveRetention(){
   }catch(e){ toast('❌ '+e.message,5000); }
 }
 
-function _oldRenderFbUsage_unused(){
-  const el=document.getElementById('fb-usage-box');
-  if(!el) return;
-  if(!isAdmin()){ el.innerHTML=''; return; }
-
-  // Tüm veriyi stringle, byte boyutunu hesapla
-  const payload={users:S.users,mahals:S.mahals,equips:S.equips,reports:S.reports,logs:S.logs,activity:S.activity,notifications:S.notifications,customCats:S.customCats};
-  const bytes=new Blob([JSON.stringify(payload)]).size;
-  const LIMIT=1024*1024*1024; // 1 GB Spark limiti
-  const pct=Math.min(100, (bytes/LIMIT)*100);
-  const pctShow=pct<0.01?'<0.01':pct.toFixed(2);
-
-  // Okunabilir boyut
-  const fmt=b=> b<1024?b+' B' : b<1048576?(b/1024).toFixed(1)+' KB' : (b/1048576).toFixed(2)+' MB';
-
-  let barColor='linear-gradient(90deg,#22c55e,#16a34a)';
-  if(pct>=90) barColor='linear-gradient(90deg,#ef4444,#dc2626)';
-  else if(pct>=70) barColor='linear-gradient(90deg,#f59e0b,#ef4444)';
-
-  el.innerHTML=`<div class="ed-card" style="margin-bottom:18px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <span style="font-size:13px;font-weight:700;color:var(--txt)">🔥 Firebase Veritabanı Doluluğu</span>
-      <span style="font-size:12px;font-weight:700;color:${pct>=90?'var(--rtxt)':'var(--txt2)'}">%${pctShow}</span>
-    </div>
-    <div style="height:12px;background:var(--bg);border-radius:7px;overflow:hidden">
-      <div style="height:100%;width:${Math.max(pct,0.5)}%;background:${barColor};transition:width .4s"></div>
-    </div>
-    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--txt3);margin-top:6px">
-      <span>${fmt(bytes)} kullanılıyor</span>
-      <span>1 GB limit (ücretsiz plan)</span>
-    </div>
-    ${pct>=90?`<div style="margin-top:10px;padding:8px 12px;background:var(--rbg);color:var(--rtxt);border-radius:8px;font-size:12px;font-weight:600">⚠️ Veritabanı doluluğu kritik seviyede! Eski rapor/logları temizleyin.</div>`:''}
-  </div>`;
-
-  // %90 üstüyse ve bugün bildirim atılmadıysa otomatik bildirim
-  if(pct>=90){
-    const todayKey='dbfull-'+new Date().toISOString().slice(0,10);
-    const already=S.notifications.find(n=>n.id===todayKey);
-    if(!already){
-      S.notifications.unshift({
-        id:todayKey, reportId:null, equipName:'SİSTEM', mahalName:'Veritabanı',
-        result:'fail', by:'Sistem', note:`Firebase doluluğu %${pctShow} — limite yaklaşıldı. Eski kayıtları temizleyin.`,
-        date:nowStr(), ts:Date.now(), readBy:[],
-      });
-      save(); // sessizce kaydet
-    }
-  }
-}
-
 function renderHome(){
   // Firebase doluluk barı (sadece admin)
   renderFbUsage();
@@ -6797,8 +6753,8 @@ function openInspModal(id){
     return `<div class="crit-item${ans?' ans-'+ans:''}" id="ci-${i}">
       <div class="crit-lbl">${i+1}. ${safe(c)}</div>
       <div class="crit-btns">
-        <button class="tog-btn${ans==='ok'?' ok-on':''}" id="cok-${i}"   onclick="setAns(${i},'ok','${c.replace(/'/g,'\\x27')}')">✅ Uygun</button>
-        <button class="tog-btn${ans==='fail'?' fail-on':''}" id="cfail-${i}" onclick="setAns(${i},'fail','${c.replace(/'/g,'\\x27')}')">❌ Uygun Değil</button>
+        <button class="tog-btn${ans==='ok'?' ok-on':''}" id="cok-${i}"   onclick="setAns(${i},'ok','${jsStr(c)}')">✅ Uygun</button>
+        <button class="tog-btn${ans==='fail'?' fail-on':''}" id="cfail-${i}" onclick="setAns(${i},'fail','${jsStr(c)}')">❌ Uygun Değil</button>
       </div>
     </div>`;}).join('');
   // Taslak varsa progress bar'ı güncelle + bilgi ver
@@ -8423,49 +8379,6 @@ function mailResolvedReports(){
   body+=`\nTakipEt Denetim Sistemi`;
   const subject=`Giderilen Uygunsuzluk Bildirimi — ${today} (${resolved.length} adet)`;
   window.location.href=`mailto:${NOTIFY_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  toast('📧 Mail uygulaması açılıyor…');
-}
-
-function _unused_oldMailFailReports(){
-  const failEquips=S.equips.filter(e=>getStatus(e)==='fail');
-  if(!failEquips.length){ toast('✅ Uygunsuz ekipman yok'); return; }
-  const byMahal={};
-  failEquips.forEach(e=>{
-    const mName=mahalById(e.mahalId)?.name||'Bilinmeyen Mahal';
-    (byMahal[mName]=byMahal[mName]||[]).push(e);
-  });
-  const today=new Date().toLocaleDateString('tr-TR');
-  let body=`UYGUNSUZ EKİPMAN RAPORU\n${today}\n`;
-  body+='='.repeat(40)+'\n\n';
-  body+=`Toplam ${failEquips.length} adet uygunsuz ekipman tespit edilmiştir:\n\n`;
-
-  Object.entries(byMahal).forEach(([mahal,eqs])=>{
-    body+=`\n📍 ${mahal} (${eqs.length} adet)\n`;
-    body+='-'.repeat(30)+'\n';
-    eqs.forEach(e=>{
-      const cat=catById(e.cat);
-      body+=`  • ${cat.icon} ${e.name} (${cat.name})\n`;
-      // Son raporun uygunsuz kriterleri
-      const lastRpt=S.reports.filter(r=>r.equipId===e.id).sort((a,b)=>b.createdAt>a.createdAt?1:-1)[0];
-      if(lastRpt&&lastRpt.answers){
-        const fails=Object.entries(lastRpt.answers).filter(([k,v])=>v==='fail').map(([k])=>k);
-        fails.forEach(f=>body+=`      ⚠️ ${f}\n`);
-      }
-      if(e.cat==='tup-dolap'&&e.tupRows){
-        e.tupRows.filter(t=>t.durum==='fail').forEach(t=>body+=`      ⚠️ Tüp ${t.tupNo}: ${t.sizinti==='evet'?'Sızıntı var':'Uygun değil'}\n`);
-      }
-      body+=`      Son denetim: ${e.lastInsp?e.lastInsp.date:'—'} / ${e.lastInsp?e.lastInsp.by:'—'}\n`;
-    });
-  });
-
-  body+='\n\n'+'='.repeat(40)+'\n';
-  body+='TakipEt Denetim Sistemi tarafından oluşturulmuştur.\n';
-
-  const subject=`🚨 Uygunsuz Ekipman Raporu - ${today} (${failEquips.length} adet)`;
-  const mailto=`mailto:${NOTIFY_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-
-  // Mail uygulamasını aç
-  window.location.href=mailto;
   toast('📧 Mail uygulaması açılıyor…');
 }
 
