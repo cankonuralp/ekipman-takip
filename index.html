@@ -5250,7 +5250,7 @@ function updateNotifBell(){
   const btn=document.getElementById('btn-notif');
   const badge=document.getElementById('notif-badge');
   if(!btn||!badge) return;
-  if(S.cur?.isSuper || ROLE_LEVEL[S.cur?.role]>=3 || getUserPerms(S.cur||{}).includes('view_notifications') || getsMaintWarning(S.cur||{})){
+  if(S.cur?.isSuper || roleLevel(S.cur?.role)>=3 || getUserPerms(S.cur||{}).includes('view_notifications') || getsMaintWarning(S.cur||{})){
     btn.style.display='';
     const cnt=unreadNotifCount();
     if(cnt>0){ badge.style.display='flex'; badge.textContent=cnt>9?'9+':cnt; }
@@ -5658,7 +5658,9 @@ function pagerHTML(total, page, perPage, fnTemplate){
 function renderMyIncomplete(){
   const el=document.getElementById('my-incomplete-box'); if(!el) return;
   const me=S.cur?.fullname||S.cur?.username||'';
-  const mine=S.reports.filter(r=>r.incomplete && (r.byId ? r.byId===S.cur?.id : r.by===me));
+  // Yönetici+/süper admin TÜM yarım raporları görür; diğer kullanıcılar sadece kendininkini
+  const seesAll = S.cur?.isSuper || roleLevel(S.cur?.role)>=3 || getUserPerms(S.cur||{}).includes('view_notifications');
+  const mine=S.reports.filter(r=>r.incomplete && (seesAll || (r.byId ? r.byId===S.cur?.id : r.by===me)));
   if(!mine.length){ el.innerHTML=''; return; }
   const PER=5;
   const pages=Math.ceil(mine.length/PER);
@@ -5666,12 +5668,13 @@ function renderMyIncomplete(){
   if(S.pgIncomplete<1) S.pgIncomplete=1;
   const start=(S.pgIncomplete-1)*PER;
   const slice=mine.slice(start, start+PER);
+  const title = seesAll ? `⚠️ Yarım kalan denetimler (${mine.length})` : `⏳ Yarım kalan denetimleriniz (${mine.length})`;
   el.innerHTML=`<div style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);border-radius:var(--r12);padding:12px 14px;margin-bottom:14px">
-    <div style="font-weight:700;color:var(--otxt);font-size:13.5px;margin-bottom:8px">⏳ Yarım kalan denetimleriniz (${mine.length})</div>
+    <div style="font-weight:700;color:var(--otxt);font-size:13.5px;margin-bottom:8px">${title}</div>
     ${slice.map(r=>`<div onclick="openReportDetail('${r.id}')" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:var(--card);border-radius:8px;margin-bottom:6px;cursor:pointer">
       <div style="min-width:0">
         <div style="font-size:13px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.catIcon||''} ${safe(r.equipName)}</div>
-        <div style="font-size:11px;color:var(--txt3)">${safe(r.mahalName)} · ${r.date}</div>
+        <div style="font-size:11px;color:var(--txt3)">${safe(r.mahalName)} · ${r.date}${seesAll&&r.by?' · '+safe(r.by):''}</div>
       </div>
       <span style="font-size:12px;color:var(--accent);font-weight:600;white-space:nowrap">Devam →</span>
     </div>`).join('')}
@@ -7896,6 +7899,18 @@ async function saveInspection(complete){
   } else {
     // Taslak/devam: rapor listesine ekle (yoksa) ama ekipman son durumunu DEĞİŞTİRME
     if(isNew) S.reports.unshift(rpt);
+    // Yarım bırakıldı + "bildirim gönder" işaretliyse yöneticilere haber ver (tamamlanmayı bekliyor)
+    if(document.getElementById('insp-notify')?.checked){
+      // Aynı rapor için tekrar yarım-bildirimi ekleme (spam önle)
+      const dup=S.notifications.some(n=>n.type==='incomplete'&&n.reportId===rpt.id);
+      if(!dup){
+        S.notifications.unshift({id:'n'+Date.now()+'i', reportId:rpt.id, equipName:e.name, mahalName:m?.name||'—',
+          result:'pend', type:'incomplete', by,
+          note:`⏳ ${m?.name||''} lokasyonundaki "${e.name}" denetimi YARIM bırakıldı — tamamlanmayı bekliyor.${note?' Not: '+note:''}`,
+          date:nowStr(), ts:Date.now(), readBy:[]});
+        if(S.notifications.length>100) S.notifications=S.notifications.slice(0,100);
+      }
+    }
   }
 
   try{
@@ -8547,8 +8562,7 @@ async function notifyManagers(reportId){
 /* Okunmamış bildirim sayısı (admin/yönetici için) */
 function unreadNotifCount(){
   if(!S.cur) return 0;
-  if(!S.cur.isSuper && ROLE_LEVEL[S.cur.role]<3 && !getUserPerms(S.cur).includes('view_notifications') && !getsMaintWarning(S.cur)) return 0;
-  return S.notifications.filter(n=>!(n.readBy||[]).includes(S.cur.id) && !(n.deletedBy||[]).includes(S.cur.id)).length;
+  return S.notifications.filter(n=>isNotifVisibleToMe(n) && !(n.readBy||[]).includes(S.cur.id)).length;
 }
 
 async function markNotifRead(id){
@@ -8565,8 +8579,8 @@ function openNotifications(){
 
 function renderNotifications(){
   const el=document.getElementById('notif-container'); if(!el) return;
-  // Sadece bana görünür (silmediğim) bildirimler
-  const notifs=S.notifications.filter(n=>!(n.deletedBy||[]).includes(S.cur?.id)).sort((a,b)=>b.ts-a.ts);
+  // Sadece bana görünür bildirimler (hedef kitledeyim + silmediğim) — zil ile aynı kural
+  const notifs=S.notifications.filter(n=>isNotifVisibleToMe(n)).sort((a,b)=>b.ts-a.ts);
   const PER=10;
   if(!S.pgNotif) S.pgNotif=1;
   const pages=Math.ceil(notifs.length/PER)||1;
@@ -8590,6 +8604,7 @@ function renderNotifications(){
       else if(t==='resolved'){ icon='🟢'; accent='#22c55e'; }
       else if(t==='ok'){ icon='✅'; accent='#22c55e'; }
       else if(t==='overdue'){ icon='⏰'; accent='#f59e0b'; }
+      else if(t==='incomplete'){ icon='⏳'; accent='#f59e0b'; }
       return `<div class="ed-card" style="margin-bottom:10px;border-left:3px solid ${accent};${unread?'':'opacity:.82'}">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
           <div style="flex:1;min-width:0;cursor:pointer" onclick="markNotifRead('${n.id}').then(()=>{${n.reportId?`openReportDetail('${n.reportId}')`:n.equipId?`openEquipDetail('${n.equipId}')`:''}})">
@@ -8637,18 +8652,22 @@ async function clearAllNotifs(){
   });
   try{ await save(); renderNotifications(); updateNotifBell(); toast('🗑️ Bildirimleriniz temizlendi'); }catch(e){ toast('❌ '+e.message); }
 }
-/* Bir bildirimin alıcıları (bildirim alması gereken kullanıcı id'leri) */
+/* Bir bildirimin HEDEF KİTLESİ (rol/yetki sistemine göre alması gereken kullanıcı id'leri).
+   TEK KAYNAK — zil sayısı, liste ve temizlik hep bunu kullanır (tutarlılık). */
 function notifRecipients(n){
-  // Bakım bildirimi: bakım uyarısı alanlar; diğerleri: admin + bildirim yetkisi olanlar
-  if(n.type==='maintenance'){
-    return S.users.filter(u=>u.isSuper || u.role==='admin' || getUserPerms(u).includes('maint_warn')).map(u=>u.id);
+  // Bakım bildirimi: bakım uyarısı alanlar
+  if(n && n.type==='maintenance'){
+    return S.users.filter(u=>u.isSuper || roleLevel(u.role)>=3 || getUserPerms(u).includes('maint_warn')).map(u=>u.id);
   }
-  return S.users.filter(u=>u.isSuper || u.role==='admin' || getUserPerms(u).includes('view_notifications')).map(u=>u.id);
+  // Diğerleri: yönetici+ (rol seviyesi 3+) VEYA "Bildirim Al" yetkisi olanlar
+  return S.users.filter(u=>u.isSuper || roleLevel(u.role)>=3 || getUserPerms(u).includes('view_notifications')).map(u=>u.id);
 }
-/* Bu bildirim bana görünür mü? (silmediysem) */
+/* Bu bildirim BANA görünür mü? (hedef kitledeyim VE silmemişsem) */
 function isNotifVisibleToMe(n){
-  if((n.deletedBy||[]).includes(S.cur?.id)) return false;
-  return true;
+  if(!S.cur) return false;
+  if((n.deletedBy||[]).includes(S.cur.id)) return false;
+  if(S.cur.isSuper) return true;                 // süper admin tümünü görür (S.users'ta yok)
+  return notifRecipients(n).includes(S.cur.id);  // sadece hedef kitledeysem
 }
 
 /* ══════════════════════════════════════
