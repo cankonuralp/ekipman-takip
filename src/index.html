@@ -757,7 +757,7 @@
   <div class="modal">
     <div class="modal-drag"></div>
     <button class="modal-x" data-close="modal-new-cat">✕</button>
-    <h2 class="modal-title">➕ Yeni Ekipman Türü</h2>
+    <h2 class="modal-title" id="newcat-title">➕ Yeni Ekipman Türü</h2>
     <div class="form-group">
       <label class="form-label">TÜR ADI</label>
       <input class="form-input" id="newcat-name" placeholder="Örn: Klima Sistemi" autocomplete="off"/>
@@ -766,7 +766,7 @@
       <label class="form-label">İKON SEÇ</label>
       <div id="newcat-icons" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
     </div>
-    <div class="form-group">
+    <div class="form-group" id="newcat-template-group">
       <label class="form-label">BAŞLANGIÇ ŞABLONU</label>
       <select class="form-select" id="newcat-template">
         <option value="blank">Boş (sıfırdan tasarla)</option>

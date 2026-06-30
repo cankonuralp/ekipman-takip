@@ -954,12 +954,12 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
 /* ── SÜPER ADMIN SABİT ŞİRKET KOLONU ── */
 /* ── SÜPER ADMIN ŞİRKET PANELİ (sol kenar, topbar altı, boydan boya) ── */
 #company-sidebar{
-  position:fixed; left:0; top:0; bottom:0; width:230px; z-index:60;
+  position:fixed; left:0; top:64px; bottom:0; width:230px; z-index:45;
   background:var(--card); border-right:1px solid var(--brd);
   display:flex; flex-direction:column; overflow:hidden;
 }
 #company-sidebar .cs-header{
-  padding:calc(13px + env(safe-area-inset-top)) 14px 13px; border-bottom:1px solid var(--brd);
+  padding:14px 14px; border-bottom:1px solid var(--brd);
   display:flex; align-items:center; justify-content:space-between; flex-shrink:0;
 }
 .cs-item{display:flex;align-items:center;gap:9px;padding:10px 11px;border-radius:9px;cursor:pointer;transition:background .12s;margin-bottom:3px}
@@ -1789,7 +1789,7 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
   <div class="modal">
     <div class="modal-drag"></div>
     <button class="modal-x" data-close="modal-new-cat">✕</button>
-    <h2 class="modal-title">➕ Yeni Ekipman Türü</h2>
+    <h2 class="modal-title" id="newcat-title">➕ Yeni Ekipman Türü</h2>
     <div class="form-group">
       <label class="form-label">TÜR ADI</label>
       <input class="form-input" id="newcat-name" placeholder="Örn: Klima Sistemi" autocomplete="off"/>
@@ -1798,7 +1798,7 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
       <label class="form-label">İKON SEÇ</label>
       <div id="newcat-icons" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
     </div>
-    <div class="form-group">
+    <div class="form-group" id="newcat-template-group">
       <label class="form-label">BAŞLANGIÇ ŞABLONU</label>
       <select class="form-select" id="newcat-template">
         <option value="blank">Boş (sıfırdan tasarla)</option>
@@ -2161,39 +2161,11 @@ async function loadGlobalContact(){
 }
 
 /* Tür adı + ikon düzenle (temel türler dahil) */
-async function openEditCat(catId){
+/* Tür ad/ikon/periyot düzenle — sıralı prompt yerine güzel modal (ikon seçici dahil) */
+function openEditCat(catId){
   if(!isAdmin()) return;
-  const c=catById(catId); if(!c) return;
-  const newName=await promptDialog({title:'Tür Adını Değiştir',message:'Yeni tür adı:',value:c.name,okText:'Kaydet'});
-  if(newName===null) return;
-  if(!newName.trim()){ toast('⚠️ Ad boş olamaz'); return; }
-  const newIcon=await promptDialog({title:'İkon',message:'Emoji ikon (örn: 🧯 🔥 ⚡ 💧):',value:c.icon||'📦',okText:'Kaydet'});
-  if(newIcon===null) return;
-  // Tür varsayılan periyodu (bu türdeki tüm ekipmanlar için, kendi periyodu olanlar hariç)
-  const curP=catDefaultPeriod(catId);
-  const pStr=await promptDialog({
-    title:'Varsayılan Kontrol Periyodu',
-    message:'Bu türdeki ekipmanlar için varsayılan periyot (gün). Örnek: 7=haftada1, 30=ayda1, 90=3ayda1, 0=periyot yok. (Ekipmana özel periyot girilmişse o geçerli olur.)',
-    value:String(curP), okText:'Kaydet'
-  });
-  if(pStr===null) return;
-  let newPeriod=parseInt(pStr);
-  if(isNaN(newPeriod)||newPeriod<0) newPeriod=curP;
-  if(!S.catPeriods) S.catPeriods={};
-  S.catPeriods[catId]=newPeriod;
-  const base=isBaseCat(catId);
-  if(base){
-    // Temel tür — override ile sakla
-    if(!S.catOverrides) S.catOverrides={};
-    S.catOverrides[catId]={name:newName.trim(), icon:newIcon.trim()||'📦'};
-  } else {
-    const cc=S.customCats.find(x=>x.id===catId);
-    if(cc){ cc.name=newName.trim(); cc.icon=newIcon.trim()||'📦'; }
-  }
-  rebuildCats();
-  logActivity('cat_edit',`"${newName}" türü düzenlendi`);
-  try{ await save(); populateCatSelects(); renderCatManageList(); toast('✅ Tür güncellendi'); }
-  catch(e){ toast('❌ '+e.message,5000); }
+  if(!catById(catId)) return;
+  openNewCatModal('company-edit', catId);
 }
 
 async function deleteCat(catId){
@@ -4305,7 +4277,7 @@ async function goToCompanyReport(cid, reportId){
 }
 
 /* ── GLOBAL: Default ekipman türleri (tüm şirketleri etkiler) ── */
-let _globalCats={ overrides:{}, forms:{}, custom:[] };
+let _globalCats={ overrides:{}, forms:{}, custom:[], periods:{} };
 
 async function loadGlobalCats(){
   if(!_db) return;
@@ -4313,7 +4285,7 @@ async function loadGlobalCats(){
     const snap=await _db.ref(`${TENANT_ROOT}/globalCats`).once('value');
     if(snap.exists()){
       const d=snap.val();
-      _globalCats={ overrides:d.overrides||{}, forms:d.forms||{}, custom:toArr(d.custom||[]) };
+      _globalCats={ overrides:d.overrides||{}, forms:d.forms||{}, custom:toArr(d.custom||[]), periods:d.periods||{} };
     }
   }catch(e){ console.warn('globalCats yüklenemedi:', e.message); }
 }
@@ -4322,7 +4294,7 @@ async function saveGlobalCats(){
   if(!_db) return;
   await _db.ref(`${TENANT_ROOT}/globalCats`).set({
     overrides:_globalCats.overrides||{}, forms:_globalCats.forms||{},
-    custom:_globalCats.custom||[], updatedAt:Date.now()
+    custom:_globalCats.custom||[], periods:_globalCats.periods||{}, updatedAt:Date.now()
   });
 }
 
@@ -4342,6 +4314,8 @@ async function applyGlobalCatsToAll(){
       // Form yapısı: global formları şirkete uygula (yeni denetimler kullanır, geçmiş raporlar kendi form kopyasını korur → veri kaybı yok)
       const mergedForms={...(d.catForms||{}), ...(_globalCats.forms||{})};
       updates['catForms']=mergedForms;
+      // Tür varsayılan periyotları: global olanları şirkete uygula (şirketin diğer periyotları korunur)
+      updates['catPeriods']={...(d.catPeriods||{}), ...(_globalCats.periods||{})};
       // Özel türler: ŞİRKETİN kendi özel türlerini KORU, global türleri ekle/güncelle (veri kaybı yok)
       const companyCustom=toArr(d.customCats||[]);
       // Şirketin global olmayan kendi türleri (korunur)
@@ -4409,36 +4383,11 @@ async function saveGlobalCatsAndApply(msg){
   }catch(e){ showLoading(false); toast('❌ '+e.message,5000); }
 }
 
-/* Yeni global tür ekle */
-async function addGlobalType(){
-  const name=await promptDialog({title:'Yeni Ekipman Türü',message:'Tür adı:',placeholder:'örn: Asansör',okText:'İleri'});
-  if(name===null||!name.trim()) return;
-  const icon=await promptDialog({title:'İkon',message:'Emoji ikon (örn: 🛗):',value:'📦',okText:'Oluştur'});
-  if(icon===null) return;
-  if(!_globalCats.custom) _globalCats.custom=[];
-  _globalCats.custom.push({id:'gcat'+Date.now(), name:name.trim(), icon:(icon.trim()||'📦')});
-  await saveGlobalCatsAndApply('Tür eklendi');
-}
+/* Yeni global tür — güzel modal (ikon seçici + şablon + periyot) */
+function addGlobalType(){ openNewCatModal('global-add'); }
 
-/* Global tür ad/ikon düzenle (temel + özel) */
-async function editGlobalType(catId){
-  const baseC=BASE_CATS.find(c=>c.id===catId);
-  const customC=(_globalCats.custom||[]).find(c=>c.id===catId);
-  const ov=(_globalCats.overrides&&_globalCats.overrides[catId])||{};
-  const curName=ov.name||(customC&&customC.name)||(baseC&&baseC.name)||'';
-  const curIcon=ov.icon||(customC&&customC.icon)||(baseC&&baseC.icon)||'📦';
-  const name=await promptDialog({title:'Tür Adı',message:'Ekipman türü adı:',value:curName,okText:'İleri'});
-  if(name===null) return;
-  const icon=await promptDialog({title:'İkon',message:'Emoji ikon (örn: 🧯):',value:curIcon,okText:'Kaydet'});
-  if(icon===null) return;
-  const nN=name.trim()||curName, nI=icon.trim()||curIcon;
-  if(customC){ customC.name=nN; customC.icon=nI; }       // özel tür: listede güncelle
-  else {                                                  // temel tür: override ile sakla
-    if(!_globalCats.overrides) _globalCats.overrides={};
-    _globalCats.overrides[catId]={name:nN, icon:nI};
-  }
-  await saveGlobalCatsAndApply('Tür güncellendi');
-}
+/* Global tür ad/ikon/periyot düzenle — güzel modal */
+function editGlobalType(catId){ openNewCatModal('global-edit', catId); }
 
 /* Global özel tür sil (temel türler silinemez) */
 async function deleteGlobalType(catId){
@@ -9456,16 +9405,51 @@ const CAT_ICONS=[
   '🚪','🪟','🛗','🪜','🧰','🎛️','📡','🛢️','⛽','🔆',
   '🧴','🧹','🚽','🛜','🖥️','🖨️','📞','🗄️','🏭','🌀'
 ];
-function openNewCatModal(){
-  // İkon seçeneklerini render et
+/* Tür ekle/düzenle modalı — şirket VE global, ekleme VE düzenleme için ortak.
+   mode: 'company-add' | 'company-edit' | 'global-add' | 'global-edit' */
+let _catModalMode='company-add';
+let _catModalEditId=null;
+function openNewCatModal(mode='company-add', editId=null){
+  _catModalMode=mode; _catModalEditId=editId;
+  const isEdit   = mode==='company-edit' || mode==='global-edit';
+  const isGlobal = mode==='global-add'  || mode==='global-edit';
+  // Düzenlemede mevcut ad/ikon/periyodu çek
+  let curName='', curIcon='📦', curPeriod=30;
+  if(isEdit){
+    if(isGlobal){
+      const baseC=BASE_CATS.find(c=>c.id===editId);
+      const customC=(_globalCats.custom||[]).find(c=>c.id===editId);
+      const ov=(_globalCats.overrides&&_globalCats.overrides[editId])||{};
+      curName=ov.name||(customC&&customC.name)||(baseC&&baseC.name)||'';
+      curIcon=ov.icon||(customC&&customC.icon)||(baseC&&baseC.icon)||'📦';
+      curPeriod=(_globalCats.periods&&_globalCats.periods[editId]!=null)?_globalCats.periods[editId]:catDefaultPeriod(editId);
+    } else {
+      const c=catById(editId);
+      curName=c.name||''; curIcon=c.icon||'📦'; curPeriod=catDefaultPeriod(editId);
+    }
+  }
+  S.newCatIcon=isEdit?curIcon:'📦';
+  // İkon seçenekleri (düzenlemede mevcut ikon seçili gelsin)
   const iconWrap=document.getElementById('newcat-icons');
   if(iconWrap){
-    iconWrap.innerHTML=CAT_ICONS.map((ic,i)=>`<button type="button" class="newcat-ico-btn${i===0?' active':''}" data-ic="${ic}" onclick="selectNewCatIcon('${ic}',this)">${ic}</button>`).join('');
+    iconWrap.innerHTML=CAT_ICONS.map(ic=>`<button type="button" class="newcat-ico-btn${ic===S.newCatIcon?' active':''}" data-ic="${ic}" onclick="selectNewCatIcon('${ic}',this)">${ic}</button>`).join('');
   }
-  S.newCatIcon='📦';
-  document.getElementById('newcat-name').value='';
-  const ps=document.getElementById('newcat-period'); if(ps) ps.value='30';
-  const pc=document.getElementById('newcat-period-custom'); if(pc){ pc.value=''; pc.style.display='none'; }
+  document.getElementById('newcat-name').value=isEdit?curName:'';
+  // Periyot
+  const ps=document.getElementById('newcat-period');
+  const pc=document.getElementById('newcat-period-custom');
+  if(ps){
+    if([7,14,30,90,180,365,0].includes(curPeriod)){ ps.value=String(curPeriod); if(pc){pc.style.display='none';pc.value='';} }
+    else if(isEdit){ ps.value='custom'; if(pc){pc.style.display='block';pc.value=curPeriod;} }
+    else { ps.value='30'; if(pc){pc.style.display='none';pc.value='';} }
+  }
+  // Başlık / buton / şablon görünürlüğü
+  const title=document.getElementById('newcat-title');
+  if(title) title.textContent=isEdit?'✏️ Türü Düzenle':(isGlobal?'➕ Yeni Global Tür':'➕ Yeni Ekipman Türü');
+  const sbtn=document.getElementById('btn-save-newcat');
+  if(sbtn) sbtn.textContent=isEdit?'✅ Kaydet':'✅ Türü Ekle';
+  const tg=document.getElementById('newcat-template-group');
+  if(tg) tg.style.display=isEdit?'none':'';   // şablon sadece yeni türde
   openModal('modal-new-cat');
 }
 function selectNewCatIcon(ic, btn){
@@ -9476,20 +9460,61 @@ function selectNewCatIcon(ic, btn){
 async function saveNewCat(){
   const name=document.getElementById('newcat-name').value.trim();
   if(!name){ toast('⚠️ Tür adı girin'); return; }
-  const id='cat-'+Date.now().toString(36);
-  S.customCats.push({id, name, icon:S.newCatIcon||'📦'});
-  // Başlangıç şablonu
-  const tpl=document.getElementById('newcat-template')?.value||'blank';
-  const tplForm=makeTemplateForm(tpl);
-  if(tplForm){ if(!S.catForms)S.catForms={}; S.catForms[id]=tplForm; }
-  // Varsayılan periyot
+  const icon=S.newCatIcon||'📦';
+  // Periyot oku (ortak)
   const pSel=document.getElementById('newcat-period');
+  let period=30;
   if(pSel){
-    let p;
-    if(pSel.value==='custom'){ p=parseInt(document.getElementById('newcat-period-custom')?.value); if(isNaN(p)||p<1) p=30; }
-    else p=parseInt(pSel.value);
-    if(!isNaN(p)){ if(!S.catPeriods) S.catPeriods={}; S.catPeriods[id]=p; }
+    if(pSel.value==='custom'){ period=parseInt(document.getElementById('newcat-period-custom')?.value); if(isNaN(period)||period<1) period=30; }
+    else { period=parseInt(pSel.value); if(isNaN(period)) period=30; }
   }
+  const mode=_catModalMode, editId=_catModalEditId;
+
+  // ── GLOBAL: yeni tür ──
+  if(mode==='global-add'){
+    const id='gcat'+Date.now();
+    if(!_globalCats.custom) _globalCats.custom=[];
+    _globalCats.custom.push({id, name, icon});
+    const tplForm=makeTemplateForm(document.getElementById('newcat-template')?.value||'blank');
+    if(tplForm){ if(!_globalCats.forms)_globalCats.forms={}; _globalCats.forms[id]=tplForm; }
+    if(!_globalCats.periods)_globalCats.periods={}; _globalCats.periods[id]=period;
+    closeModal('modal-new-cat');
+    await saveGlobalCatsAndApply('Tür eklendi');
+    return;
+  }
+  // ── GLOBAL: düzenle ──
+  if(mode==='global-edit'){
+    const customC=(_globalCats.custom||[]).find(c=>c.id===editId);
+    if(customC){ customC.name=name; customC.icon=icon; }
+    else { if(!_globalCats.overrides)_globalCats.overrides={}; _globalCats.overrides[editId]={name, icon}; }
+    if(!_globalCats.periods)_globalCats.periods={}; _globalCats.periods[editId]=period;
+    closeModal('modal-new-cat');
+    await saveGlobalCatsAndApply('Tür güncellendi');
+    return;
+  }
+  // ── ŞİRKET: düzenle ──
+  if(mode==='company-edit'){
+    if(!S.catPeriods) S.catPeriods={};
+    S.catPeriods[editId]=period;
+    if(isBaseCat(editId)){
+      if(!S.catOverrides) S.catOverrides={};
+      S.catOverrides[editId]={name, icon};
+    } else {
+      const cc=S.customCats.find(x=>x.id===editId);
+      if(cc){ cc.name=name; cc.icon=icon; }
+    }
+    rebuildCats();
+    logActivity('cat_edit', `"${name}" türü düzenlendi`);
+    try{ await save(); closeModal('modal-new-cat'); populateCatSelects(); renderCatManageList(); renderCurrent(); toast('✅ Tür güncellendi'); }
+    catch(e){ toast('❌ '+e.message,5000); }
+    return;
+  }
+  // ── ŞİRKET: yeni tür (varsayılan) ──
+  const id='cat-'+Date.now().toString(36);
+  S.customCats.push({id, name, icon});
+  const tplForm=makeTemplateForm(document.getElementById('newcat-template')?.value||'blank');
+  if(tplForm){ if(!S.catForms)S.catForms={}; S.catForms[id]=tplForm; }
+  if(!S.catPeriods) S.catPeriods={}; S.catPeriods[id]=period;
   rebuildCats();
   logActivity('cat_add', `"${name}" türü eklendi`);
   try{
@@ -10711,7 +10736,7 @@ function setupListeners(){
   document.getElementById('btn-export-excel')?.addEventListener('click',exportReportsExcel);
   document.getElementById('btn-mail-fails')?.addEventListener('click',mailFailReports);
   document.getElementById('btn-mail-resolved')?.addEventListener('click',mailResolvedReports);
-  document.getElementById('btn-new-type')?.addEventListener('click',openNewCatModal);
+  document.getElementById('btn-new-type')?.addEventListener('click',()=>openNewCatModal());
   document.getElementById('btn-notif')?.addEventListener('click',openNotifications);
   document.getElementById('btn-save-newcat')?.addEventListener('click',saveNewCat);
   // Form tasarımcısı
