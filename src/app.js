@@ -3221,10 +3221,12 @@ function updateCompanyBanner(){
     if(!band){
       band=document.createElement('div');
       band.id='super-company-band';
-      band.style.cssText='position:sticky;top:0;z-index:50;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:8px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px';
+      // padding-top'a safe-area: iPhone çentik/durum çubuğu altında kalmasın ("← Şirketler" tuşu erişilebilir olsun)
+      band.style.cssText='position:sticky;top:0;z-index:101;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:calc(8px + env(safe-area-inset-top)) 16px 8px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px';
       const app=document.getElementById('app');
       app.insertBefore(band, app.firstChild);
     }
+    document.body.classList.add('has-company-band');
     band.innerHTML=`<span style="display:flex;align-items:center;gap:7px;min-width:0">
         <span style="font-size:15px">🏢</span>
         <span style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(S.activeCompanyName||'Şirket')}</span>
@@ -3232,8 +3234,9 @@ function updateCompanyBanner(){
       </span>
       <button onclick="exitCompany()" style="background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">← Şirketler</button>`;
     band.style.display='flex';
-  } else if(band){
-    band.style.display='none';
+  } else {
+    document.body.classList.remove('has-company-band');
+    if(band) band.style.display='none';
   }
 }
 

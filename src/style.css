@@ -118,6 +118,8 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
   padding-top:calc(10px + env(safe-area-inset-top));
 }
 [data-theme=dark] .topbar{background:rgba(13,17,23,.9)}
+/* Süper admin şirket bandı varken üst safe-area boşluğunu BANT halleder; topbar tekrarlamasın */
+body.has-company-band .topbar{ padding-top:10px; }
 .topbar-brand{display:flex;align-items:center;gap:8px}
 .topbar-icon{font-size:20px}
 .topbar-title{font-size:16px;color:var(--txt);letter-spacing:-.3px}
