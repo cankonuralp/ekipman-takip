@@ -22,28 +22,37 @@ Bu dosya, projeye Claude Code'da devam edecek olan asistan içindir. **İlk iş 
 
 ---
 
-## 2. DOSYA YAPISI (kaynak — bu klasör)
+## 2. DOSYA YAPISI (git reposu = bu klasör, origin: cankonuralp/ekipman-takip)
 ```
-takipet-kaynak/
-├── app.js               (~8700 satır — TÜM uygulama mantığı)
-├── style.css            (~1000 satır)
-├── index.html           (~880 satır body — script'siz, build inline eder)
-├── qrcode-generator.js  (QR üretici kütüphane)
-├── icons.json           (PNG ikonlar base64: apple, fav192, fav512, fav32)
-├── build.py             (BUILD SCRIPT — tek dosya üretir)
-└── dist/index.html      (BUILD ÇIKTISI — deploy edilen tek dosya)
+takipet/                     ← git kökü (GitHub Pages bu kökten yayınlar)
+├── index.html               ← BUILD ÇIKTISI — canlı site (deploy edilen tek dosya)
+├── README.md                ← bu dosya
+├── .gitignore
+└── src/                     ← TÜM KAYNAK (Pages bunları sunmaz, sadece versiyonlar)
+    ├── app.js               (~8700 satır — TÜM uygulama mantığı)
+    ├── style.css            (~1000 satır)
+    ├── index.html           (şablon — script'siz, build inline eder)
+    ├── qrcode-generator.js  (QR üretici kütüphane)
+    ├── icons.json           (PNG ikonlar base64: apple, fav192, fav512, fav32)
+    └── build.py             (BUILD SCRIPT — kök index.html üretir)
 ```
+**Neden böyle:** kök `index.html` (build çıktısı) ile `src/index.html` (şablon) aynı isimde —
+çakışmasın diye kaynak `src/` altında. Kök index.html = canlı site; Pages kökten yayınlar.
 
 ---
 
-## 3. BUILD NASIL ÇALIŞIR (ZORUNLU YÖNTEM)
+## 3. BUILD & DEPLOY NASIL ÇALIŞIR (ZORUNLU YÖNTEM)
 ```bash
-python build.py          # style.css + qrcode + app.js → dist/index.html'e inline eder
-node --check app.js      # HER build'den sonra ZORUNLU syntax kontrolü
+cd src
+python build.py          # style.css + qrcode + app.js → KÖK index.html'e inline eder
+node --check app.js       # HER build'den sonra ZORUNLU syntax kontrolü (src/app.js)
+cd ..
+git add -A && git commit -m "..." && git push   # GitHub Pages otomatik yayınlar
 ```
-- `build.py`, `index.html`'in body'sini alır, içindeki `<script>`leri siler, head'e Firebase SDK + QR + jsPDF CDN'lerini + base64 favicon/manifest ekler, sonuna qrcode-generator.js ve app.js'i inline gömer.
-- **Deploy:** `dist/index.html` → GitHub Pages.
-- **HER teslimde:** build → `node --check app.js` → çıktıda özelliğin VAR olduğunu grep ile teyit et → kullanıcıya ver → git commit/push komutu öner.
+- `build.py`, `src/index.html` şablonunun body'sini alır, `<script>`leri siler, head'e Firebase SDK + QR + jsPDF CDN'lerini + base64 favicon/manifest ekler, sonuna qrcode-generator.js ve app.js'i inline gömer; çıktıyı **repo kökü `index.html`**'e yazar.
+- **Deploy:** `git push` → GitHub Pages kök `index.html`'i otomatik yayınlar (~1 dk). Ayrı kopyalama yok.
+- Windows notu: yeni terminalde Python/Node PATH'te görünmezse PATH'i tazele (bkz. memory).
+- **HER teslimde:** build → `node --check src/app.js` → kök index.html'de özelliğin VAR olduğunu grep ile teyit et → push → kullanıcıya hard-refresh hatırlat.
 
 ---
 
@@ -150,9 +159,9 @@ Storage:
 
 ## 10. İLK YAPMAN GEREKENLER (Claude Code'da)
 1. Bu dosyayı oku. ✅
-2. `python build.py` çalıştır, `node --check app.js` ile doğrula.
-3. Git deposunu kur (yoksa): `cankonuralp.github.io/ekipman-takip/` reposuna bağla.
-4. Kullanıcı (reisim) en son `dist/index.html`'i deploy edip test edecek; bildirdiği sorunları sırayla çöz.
-5. Her değişiklikte: build → node --check → grep ile teyit → commit/push.
+2. `cd src && python build.py` çalıştır, `node --check app.js` ile doğrula.
+3. Git zaten kurulu: origin = `github.com/cankonuralp/ekipman-takip` (branch main). Kurulum 2026-06-30'da yapıldı. ✅
+4. Kullanıcı (reisim) `git push` sonrası canlı siteyi test edecek; bildirdiği sorunları sırayla çöz.
+5. Her değişiklikte: build (kök index.html) → node --check src/app.js → grep ile teyit → git push.
 
 Başarılar. Reisim'e iyi bak. 🔧
