@@ -678,9 +678,10 @@ function estimateDbBytes(){
 
 /* Yüklenen belgelerin toplam boyutu (Storage) — denetim/ekipman eklerindeki dosyalardan */
 function estimateStorageBytes(){
+  // Gerçek belgeler e.documents[].size'da (ekipman belgeleri) + şirket klasörleri.
   let total=0;
-  (S.reports||[]).forEach(r=>{ (r.files||[]).forEach(f=>{ total+=(f.size||0); }); });
-  (S.equips||[]).forEach(e=>{ (e.files||[]).forEach(f=>{ total+=(f.size||0); }); });
+  (S.equips||[]).forEach(e=>{ (e.documents||[]).forEach(d=>{ total+=(d.size||0); }); });
+  (S.companyFolders||[]).forEach(f=>{ (f.documents||f.files||[]).forEach(d=>{ total+=(d.size||0); }); });
   return total;
 }
 
@@ -4151,7 +4152,7 @@ async function uploadDocBlob(blob, name, type){
 
     // Ekipmana kaydet
     if(!Array.isArray(e.documents)) e.documents=[];
-    e.documents.push({ id:docId, name, type, path, url, ts:Date.now(), by:S.cur?.username||'—', pinned:false });
+    e.documents.push({ id:docId, name, type, path, url, size:(blob?.size||0), ts:Date.now(), by:S.cur?.username||'—', pinned:false });
     await save();
     hidePersistentToast(loadingToast);
     toast('✅ Belge yüklendi: '+name);
@@ -5807,8 +5808,10 @@ async function saveInspection(complete){
       });
       if(S.notifications.length>100) S.notifications=S.notifications.slice(0,100);
     }
-    // Manuel bildirim
-    if(document.getElementById('insp-notify')?.checked){
+    // Bildirim: uygunsuzluk (fail) HER ZAMAN yöneticilere gider (kritik, kutuya bağlı değil);
+    // uygun (ok) ise yalnızca "bildirim gönder" kutusu işaretliyse gider.
+    const wantNotify=document.getElementById('insp-notify')?.checked;
+    if(result==='fail' || wantNotify){
       const fails=collectFailLabels(_insp.form, allAnswers);
       let msg, type;
       if(result==='fail'){ type='fail'; msg=`${fails.length?fails.join(', '):'Denetim'} sebebiyle ${m?.name||''} lokasyonundaki "${e.name}" ekipmanı uygunsuzdur.`; }

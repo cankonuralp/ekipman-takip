@@ -943,7 +943,8 @@ body.has-company-band .topbar{ padding-top:10px; }
   /* Üst bar (topbar) + mor bant TAM GENİŞLİK kalır; sadece İÇERİK (.pages) panelin yanına kayar.
      Böylece TakipEt logosu en solda, panel üst barın ALTINDA başlar (alt navbar de tam genişlik). */
   body.has-company-sidebar #app .pages{ padding-left:230px; }
-  body.has-company-sidebar #app .container{ max-width:1200px; margin:0; padding-left:28px; padding-right:28px; }
+  /* İçerik, panelin sağındaki alanda ORTALANIR (dengeli, ekranı verimli kullanır) */
+  body.has-company-sidebar #app .container{ max-width:1280px; margin:0 auto; padding-left:28px; padding-right:28px; }
 }
 /* Dar ekranda panel gizli (içeriğe yer kalmıyor) */
 @media(max-width:1279px){
