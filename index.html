@@ -2164,13 +2164,13 @@ async function loadGlobalContact(){
 /* Tür adı + ikon düzenle (temel türler dahil) */
 /* Tür ad/ikon/periyot düzenle — sıralı prompt yerine güzel modal (ikon seçici dahil) */
 function openEditCat(catId){
-  if(!isAdmin()) return;
+  if(!canDo('manage_types')){ toast('🚫 Yetkiniz yok'); return; }
   if(!catById(catId)) return;
   openNewCatModal('company-edit', catId);
 }
 
 async function deleteCat(catId){
-  if(!isAdmin()) return;
+  if(!canDo('manage_types')){ toast('🚫 Yetkiniz yok'); return; }
   if(isBaseCat(catId)){ toast('⚠️ Varsayılan türler silinemez'); return; }
   const c=catById(catId);
   const count=S.equips.filter(e=>e.cat===catId).length;
@@ -5730,7 +5730,7 @@ function _renderHomeRest(now){
         ${fail?`<span class="mini-stat ms-fail">❌${fail}</span>`:''}
         ${pend?`<span class="mini-stat ms-pend">⏳${pend}</span>`:''}
       </div>
-      ${isAdmin()?`<button class="mahal-edit-btn" data-mid="${m.id}">✏️</button>`:''}`;
+      ${(canDo('add_mahal')||canDo('del_mahal'))?`<button class="mahal-edit-btn" data-mid="${m.id}">✏️</button>`:''}`;
     card.addEventListener('click',ev=>{
       if(ev.target.closest('.mahal-edit-btn')){ openEditMahal(m.id); return; }
       S.activeMahalId=m.id; showPage('mahal');
@@ -8226,7 +8226,7 @@ function renderReportDetail(){
         ${r.equipId&&equipById(r.equipId)?`<button class="btn btn-secondary" onclick="openEquipDetail('${r.equipId}')">📦 Ekipmana Git (geçmiş denetimler)</button>`:''}
         <button class="btn btn-primary" onclick="printReport('${r.id}')">🖨️ PDF</button>
         <button class="btn btn-accent btn-sm" onclick="notifyManagers('${r.id}')">🔔 Yöneticiye Bildir</button>
-        ${isAdmin()?`<button class="btn btn-danger btn-sm" onclick="deleteReport('${r.id}')">🗑️</button>`:''}
+        ${canDo('delete_report')?`<button class="btn btn-danger btn-sm" onclick="deleteReport('${r.id}')">🗑️</button>`:''}
       </div>
     </div>`;
 }
@@ -8419,7 +8419,7 @@ function closePrintOverlay(){
 }
 
 async function deleteReport(id){
-  if(!isAdmin()){ toast('🚫 Sadece Admin silebilir'); return; }
+  if(!canDo('delete_report')){ toast('🚫 Yetkiniz yok'); return; }
   if(!await confirmDialog({title:'Rapor Silinsin mi?',message:'Bu denetim raporu kalıcı olarak silinecek.',danger:true,okText:'Evet, Sil'})) return;
   const r=rptById(id);
   S.reports=S.reports.filter(r=>r.id!==id);
@@ -8910,7 +8910,7 @@ function renderProfile(){
     <div style="margin-bottom:14px">
       <button class="btn btn-primary btn-full" onclick="openDashboard()">📊 Analiz Paneli (Dashboard)</button>
     </div>`:''}
-    ${isAdmin()?`
+    ${canDo('manage_users')?`
     <p class="sec-label">👥 Kullanıcı Yönetimi</p>
     <div style="margin-bottom:10px"><button class="btn btn-accent btn-sm" id="btn-add-user-prof">+ Yeni Kullanıcı</button></div>
     <div id="user-list-prof"></div>
@@ -9176,12 +9176,18 @@ function onUeRoleChange(){
 }
 
 async function saveUser(){
-  if(!isAdmin()){ toast('🚫 Yetkiniz yok'); return; }
+  if(!canDo('manage_users')){ toast('🚫 Yetkiniz yok'); return; }
   const uname=document.getElementById('ue-uname').value.trim();
   const fname=document.getElementById('ue-fname').value.trim();
   const pass =document.getElementById('ue-pass').value;
   const role =document.getElementById('ue-role').value;
   if(!uname){ toast('⚠️ Kullanıcı adı zorunlu'); return; }
+  // Yetki yükseltme koruması: admin olmayan, admin rolü atayamaz ve admin/süper hesabı düzenleyemez
+  if(!isAdmin()){
+    if(role==='admin'){ toast('🚫 "Admin" rolü atama yetkiniz yok'); return; }
+    const tgt=S.editUserId?userById(S.editUserId):null;
+    if(tgt && (tgt.role==='admin'||tgt.isSuper)){ toast('🚫 Admin hesabını düzenleyemezsiniz'); return; }
+  }
   if(S.editUserId){
     const u=userById(S.editUserId); if(!u) return;
     // Süper admin'i sadece süper admin düzenleyebilir, bayrağı/rolü korunur
@@ -9260,10 +9266,11 @@ async function saveChangePw(){
 }
 
 async function deleteUser(){
-  if(!isAdmin()) return;
+  if(!canDo('manage_users')){ toast('🚫 Yetkiniz yok'); return; }
   const u=userById(S.editUserId); if(!u) return;
   if(u.isSuper){ toast('🔒 Süper admin hesabı silinemez'); return; }
   if(u.id===S.cur?.id){ toast('⚠️ Kendinizi silemezsiniz'); return; }
+  if(!isAdmin() && u.role==='admin'){ toast('🚫 Admin hesabını silemezsiniz'); return; }
   if(!await confirmDialog({title:'Kullanıcı Silinsin mi?',message:`"${u.fullname||u.username}" kullanıcısı kalıcı olarak silinecek.`,danger:true,okText:'Evet, Sil'})) return;
   S.users=S.users.filter(x=>x.id!==S.editUserId);
   logActivity('user_del', `"${u.fullname||u.username}" kullanıcısı silindi`);
@@ -9311,7 +9318,7 @@ function openAddMahal(){
 }
 
 async function saveMahal(){
-  if(!isAdmin()){ toast('🚫 Yetkiniz yok'); return; }
+  if(!canDo('add_mahal')){ toast('🚫 Yetkiniz yok'); return; }
   const name=document.getElementById('inp-mahal-name').value.trim();
   const desc=document.getElementById('inp-mahal-desc').value.trim();
   if(!name){ toast('⚠️ Mahal adı gerekli'); return; }
@@ -9326,7 +9333,7 @@ async function saveMahal(){
 }
 
 function openEditMahal(id){
-  if(!isAdmin()){ toast('🚫 Yetkiniz yok'); return; }
+  if(!canDo('add_mahal')){ toast('🚫 Yetkiniz yok'); return; }
   S.editMahalId=id;
   const m=mahalById(id); if(!m) return;
   document.getElementById('edit-mahal-name').value=m.name;
@@ -9337,7 +9344,7 @@ function openEditMahal(id){
 }
 
 async function saveEditMahal(){
-  if(!isAdmin()) return;
+  if(!canDo('add_mahal')){ toast('🚫 Yetkiniz yok'); return; }
   const m=mahalById(S.editMahalId); if(!m) return;
   const name=document.getElementById('edit-mahal-name').value.trim();
   if(!name){ toast('⚠️ Ad boş olamaz'); return; }
@@ -9349,7 +9356,7 @@ async function saveEditMahal(){
 
 /* Mahali ekipmanlarıyla kopyala (raporlar hariç — temiz başlangıç) */
 async function copyMahal(){
-  if(!isAdmin()) return;
+  if(!canDo('add_mahal')){ toast('🚫 Yetkiniz yok'); return; }
   const m=mahalById(S.editMahalId); if(!m) return;
   const srcEquips=S.equips.filter(e=>e.mahalId===m.id);
   const newName=await promptDialog({
@@ -9383,7 +9390,7 @@ async function copyMahal(){
 }
 
 async function deleteMahal(){
-  if(!isAdmin()) return;
+  if(!canDo('del_mahal')){ toast('🚫 Yetkiniz yok'); return; }
   const m=mahalById(S.editMahalId); if(!m) return;
   if(!await confirmDialog({title:'Mahal Silinsin mi?',message:`"${m.name}" ve içindeki tüm ekipman/raporlar kalıcı olarak silinecek.`,danger:true,okText:'Evet, Sil'})) return;
   const ids=S.equips.filter(e=>e.mahalId===S.editMahalId).map(e=>e.id);
@@ -10096,7 +10103,7 @@ function openEditEquip(id){
     else if([7,14,30,90,180,365,0].includes(e.period)){ pSel.value=String(e.period); pCustom.style.display='none'; }
     else { pSel.value='custom'; pCustom.style.display='block'; pCustom.value=e.period; }
   }
-  document.getElementById('btn-del-equip').style.display=isAdmin()?'':'none';
+  document.getElementById('btn-del-equip').style.display=canDo('del_equip')?'':'none';
   // Bakım bilgilerini yükle
   const mt=e.maintenance||{};
   const md=document.getElementById('edit-equip-maint-date'); if(md) md.value=isoToTr(mt.date||'');
@@ -10162,7 +10169,7 @@ async function saveEditEquip(){
 }
 
 async function deleteEquip(){
-  if(!isAdmin()){ toast('🚫 Sadece Admin silebilir'); return; }
+  if(!canDo('del_equip')){ toast('🚫 Yetkiniz yok'); return; }
   const e=equipById(S.editEquipId); if(!e) return;
   if(!await confirmDialog({title:'Ekipman Silinsin mi?',message:`"${e.name}" ve denetim raporları kalıcı olarak silinecek.`,danger:true,okText:'Evet, Sil'})) return;
   S.equips  =S.equips.filter(x=>x.id!==S.editEquipId);
