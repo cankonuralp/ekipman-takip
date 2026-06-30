@@ -1551,7 +1551,7 @@ function exitGlobalTypeManager(){
 function globalNav(which){
   setGlobalNavActive(which);
   // Tüm view'ları gizle
-  ['companies','reports','profile'].forEach(v=>{
+  ['companies','reports','profile','types'].forEach(v=>{
     const el=document.getElementById('gview-'+v);
     if(el) el.style.display='none';
   });
@@ -1564,8 +1564,9 @@ function globalNav(which){
     return;
   }
   if(which==='types'){
-    // Global tür yönetimi — şirket-içi Ekipmanlar ekranının BİREBİR aynısı (tam ekran, pop-up değil)
-    openGlobalTypeManager();
+    // Global tür yönetimi — şirkete GİRMEDEN, ekipman göstermeden (tam ekran, pop-up değil).
+    document.getElementById('gview-types').style.display='block';
+    loadGlobalCats().then(()=>renderGlobalTypesPanel());
     return;
   }
   const view=document.getElementById('gview-'+which);
@@ -2294,6 +2295,106 @@ async function applyGlobalCatsToAll(){
     }catch(e){ console.warn('Şirket güncellenemedi:', c.id, e.message); }
   }
   return count;
+}
+
+/* ── GLOBAL TÜR PANELİ (Türler sekmesi) ──
+   Şirkete GİRMEDEN, ekipman/şirket verisi göstermeden tür yönetimi.
+   Görünüm: şirket-içi Ekipmanlar ekranıyla aynı (cat-section). Değişiklik OTOMATİK tüm şirketlere uygulanır. */
+function renderGlobalTypesPanel(){
+  const el=document.getElementById('global-cat-list');
+  if(!el) return;
+  // Temel türler (global override uygulanmış) + global özel türler — ŞİRKET VERİSİ YOK
+  const baseCats=BASE_CATS.map(c=>{
+    const ov=_globalCats.overrides&&_globalCats.overrides[c.id];
+    return {id:c.id, name:(ov&&ov.name)||c.name, icon:(ov&&ov.icon)||c.icon, base:true};
+  });
+  const customCats=(_globalCats.custom||[]).map(c=>({id:c.id, name:c.name, icon:c.icon||'📦', base:false}));
+  const cats=[...baseCats, ...customCats];
+  el.innerHTML=cats.map(c=>{
+    const hasForm=_globalCats.forms&&_globalCats.forms[c.id];
+    return `<div class="cat-section">
+      <div class="cat-section-title" style="cursor:default">
+        <span class="cat-sec-icon">${c.icon||'📦'}</span>
+        <span class="cat-sec-name">${safe(c.name)}${c.base?'<span style="font-size:11px;color:var(--txt3);font-weight:500"> · varsayılan</span>':''}</span>
+        <span class="cat-mng" style="margin-left:auto">
+          <button class="cat-mng-btn" onclick="editGlobalType('${c.id}')" title="Ad/ikon düzenle">✏️</button>
+          <button class="cat-mng-btn" onclick="editGlobalTypeForm('${c.id}')" title="Denetim formunu düzenle">🛠️${hasForm?'<span style="color:var(--green)">•</span>':''}</button>
+          ${!c.base?`<button class="cat-mng-btn" onclick="deleteGlobalType('${c.id}')" title="Türü sil">🗑️</button>`:''}
+        </span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* Değişikliği global'e kaydet + TÜM şirketlere otomatik uygula + paneli yenile */
+async function saveGlobalCatsAndApply(msg){
+  showLoading(true);
+  try{
+    await saveGlobalCats();
+    const n=await applyGlobalCatsToAll();
+    showLoading(false);
+    toast(`✅ ${msg} — ${n} şirkete uygulandı`);
+    logSuperActivity('global_types', `${msg} (${n} şirket)`);
+    renderGlobalTypesPanel();
+  }catch(e){ showLoading(false); toast('❌ '+e.message,5000); }
+}
+
+/* Yeni global tür ekle */
+async function addGlobalType(){
+  const name=await promptDialog({title:'Yeni Ekipman Türü',message:'Tür adı:',placeholder:'örn: Asansör',okText:'İleri'});
+  if(name===null||!name.trim()) return;
+  const icon=await promptDialog({title:'İkon',message:'Emoji ikon (örn: 🛗):',value:'📦',okText:'Oluştur'});
+  if(icon===null) return;
+  if(!_globalCats.custom) _globalCats.custom=[];
+  _globalCats.custom.push({id:'gcat'+Date.now(), name:name.trim(), icon:(icon.trim()||'📦')});
+  await saveGlobalCatsAndApply('Tür eklendi');
+}
+
+/* Global tür ad/ikon düzenle (temel + özel) */
+async function editGlobalType(catId){
+  const baseC=BASE_CATS.find(c=>c.id===catId);
+  const customC=(_globalCats.custom||[]).find(c=>c.id===catId);
+  const ov=(_globalCats.overrides&&_globalCats.overrides[catId])||{};
+  const curName=ov.name||(customC&&customC.name)||(baseC&&baseC.name)||'';
+  const curIcon=ov.icon||(customC&&customC.icon)||(baseC&&baseC.icon)||'📦';
+  const name=await promptDialog({title:'Tür Adı',message:'Ekipman türü adı:',value:curName,okText:'İleri'});
+  if(name===null) return;
+  const icon=await promptDialog({title:'İkon',message:'Emoji ikon (örn: 🧯):',value:curIcon,okText:'Kaydet'});
+  if(icon===null) return;
+  const nN=name.trim()||curName, nI=icon.trim()||curIcon;
+  if(customC){ customC.name=nN; customC.icon=nI; }       // özel tür: listede güncelle
+  else {                                                  // temel tür: override ile sakla
+    if(!_globalCats.overrides) _globalCats.overrides={};
+    _globalCats.overrides[catId]={name:nN, icon:nI};
+  }
+  await saveGlobalCatsAndApply('Tür güncellendi');
+}
+
+/* Global özel tür sil (temel türler silinemez) */
+async function deleteGlobalType(catId){
+  const c=(_globalCats.custom||[]).find(x=>x.id===catId);
+  if(!c) return;
+  if(!await confirmDialog({title:'Türü Sil',message:`"${safe(c.name)}" türü silinecek ve tüm şirketlerden kalkacak. (O türdeki mevcut ekipman/raporlar şirkette korunur.) Devam?`,danger:true,okText:'Sil'})) return;
+  _globalCats.custom=(_globalCats.custom||[]).filter(x=>x.id!==catId);
+  if(_globalCats.forms) delete _globalCats.forms[catId];
+  await saveGlobalCatsAndApply('Tür silindi');
+}
+
+/* Global tür denetim formunu düzenle — form tasarımcısını GLOBAL modda açar */
+function editGlobalTypeForm(catId){
+  const baseC=BASE_CATS.find(c=>c.id===catId);
+  const customC=(_globalCats.custom||[]).find(c=>c.id===catId);
+  const ov=(_globalCats.overrides&&_globalCats.overrides[catId])||{};
+  const nm=ov.name||(customC&&customC.name)||(baseC&&baseC.name)||catId;
+  _fdForm=(_globalCats.forms&&_globalCats.forms[catId]) ? JSON.parse(JSON.stringify(_globalCats.forms[catId])) : defaultFormFor(catId);
+  _fdCatId=catId; _fdCatName=nm; _fdSaveTarget='global'; _fdOpen=-1;
+  document.getElementById('fd-title').textContent='🛠️ '+nm;
+  document.getElementById('fd-subtitle').textContent='Global form — kaydedince tüm şirketlere uygulanır (geçmiş raporlar korunur).';
+  // Periyot/bakım kutuları şirket-içi kavramlar → global modda gizle
+  const pBox=document.getElementById('fd-period-box'); if(pBox) pBox.style.display='none';
+  const mBox=document.getElementById('fd-maint-box'); if(mBox) mBox.style.display='none';
+  renderFdFields();
+  openModal('modal-form-designer');
 }
 
 function openGlobalTypes(){
@@ -7694,6 +7795,18 @@ async function fdSaveForm(){
   // Geçici UI alanlarını temizle (kaydedilmesin)
   _fdForm.fields.forEach(f=>{ delete f._openCol; delete f._addingCol; });
   try{
+    if(_fdSaveTarget==='global'){
+      // Global tür formu — globalCats'e yaz, otomatik tüm şirketlere uygula.
+      if(!_globalCats.forms) _globalCats.forms={};
+      _globalCats.forms[_fdCatId]=JSON.parse(JSON.stringify(_fdForm));
+      _fdSaveTarget=null;
+      closeModal('modal-form-designer');
+      // Gizlenen periyot/bakım kutularını geri aç (sonraki şirket-içi kullanım için)
+      const pBox=document.getElementById('fd-period-box'); if(pBox) pBox.style.display='';
+      const mBox=document.getElementById('fd-maint-box'); if(mBox) mBox.style.display='';
+      await saveGlobalCatsAndApply('Form kaydedildi');
+      return;
+    }
     if(_fdSaveTarget==='newequip'){
       // Eklenecek ekipmanın taslağına yaz — kalıcı kayıt saveNewEquip'te
       _newEquipForm=JSON.parse(JSON.stringify(_fdForm));
