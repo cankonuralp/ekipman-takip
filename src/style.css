@@ -285,6 +285,19 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
 .sb-pend{background:rgba(251,191,36,.18); color:var(--otxt)}
 
 /* ── EQUIP DETAIL ── */
+/* ── KÜMELEME + SÜRÜKLE-BIRAK (mahal ekipman listesi) ── */
+.cluster-hdr{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--txt2);padding:12px 4px 6px;margin-top:4px}
+.eq-sortable{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.eq-sortable.dragging{opacity:.45}
+.eq-sortable-body{flex:1;min-width:0}
+.eq-sortable-body .equip-row{margin-bottom:0}
+.eq-drag{cursor:grab;color:var(--txt3);font-size:18px;line-height:1;flex-shrink:0;user-select:none;padding:0 2px;touch-action:none}
+.eq-drag:active{cursor:grabbing}
+.eq-reorder{display:flex;flex-direction:column;gap:2px;flex-shrink:0}
+.eq-ord-btn{width:26px;height:22px;border:1px solid var(--brd);background:var(--bg);border-radius:6px;cursor:pointer;font-size:10px;color:var(--txt2);display:flex;align-items:center;justify-content:center;padding:0}
+.eq-ord-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.eq-ord-btn:disabled{opacity:.3;cursor:default}
+
 .ed-card{background:var(--card);border-radius:var(--r20);padding:20px;box-shadow:var(--sh1);margin-bottom:14px}
 .ed-hdr{display:flex;align-items:flex-start;gap:14px;margin-bottom:16px}
 .ed-icon{font-size:40px}
