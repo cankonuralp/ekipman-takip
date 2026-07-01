@@ -7881,10 +7881,10 @@ async function saveInspection(complete){
       });
       if(S.notifications.length>100) S.notifications=S.notifications.slice(0,100);
     }
-    // HER tamamlanan denetim yöneticilere bildirilir (uygun/uygunsuz fark etmez).
-    // Kimin GÖRECEĞİ alıcı-kapısında belirlenir: admin, süper admin, yönetici(rol≥3) veya "Bildirim Al" yetkisi.
-    // (fail→ok geçişi zaten yukarıda "giderildi" olarak bildirildiği için burada tekrarlanmaz.)
-    if(!(prevStatus==='fail' && result==='ok')){
+    // Bildirim YALNIZCA "Yöneticilere bildirim gönder" kutusu işaretliyse gider (kutu ana anahtar).
+    // İşaretlenince kimin GÖRECEĞİ alıcı-kapısında belirlenir: admin, süper admin, yönetici(rol≥3)
+    // veya "Bildirim Al" yetkisi olan herkes. (fail→ok geçişi zaten "giderildi" olarak yukarıda bildirilir.)
+    if(document.getElementById('insp-notify')?.checked && !(prevStatus==='fail' && result==='ok')){
       const fails=collectFailLabels(_insp.form, allAnswers);
       let msg, type;
       if(result==='fail'){ type='fail'; msg=`${fails.length?fails.join(', '):'Denetim'} sebebiyle ${m?.name||''} lokasyonundaki "${e.name}" ekipmanı uygunsuzdur.`; }
