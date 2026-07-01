@@ -3834,6 +3834,23 @@ function renderMahalPage(){
     listEl.innerHTML=`<div class="empty-state"><div class="empty-icon">🔧</div><p>Bu mahalde ekipman yok.</p></div>`;
     return;
   }
+  // ── Durum filtresi (Tümü / Uygun / Uygunsuz / Bekliyor) ──
+  if(!S.mahalFilter) S.mahalFilter='all';
+  const cOk=eq.filter(e=>getStatus(e)==='ok').length;
+  const cFail=eq.filter(e=>getStatus(e)==='fail').length;
+  const cPend=eq.filter(e=>getStatus(e)==='pend').length;
+  const filterRow=`<div class="status-filter-row" style="margin-bottom:12px">${[
+    ['all','Tümü ('+eq.length+')'],['ok','✅ Uygun ('+cOk+')'],['fail','❌ Uygunsuz ('+cFail+')'],['pend','⏳ Bekliyor ('+cPend+')']
+  ].map(([id,l])=>`<button class="sfilter-btn${S.mahalFilter===id?' active':''}" data-mf="${id}">${l}</button>`).join('')}</div>`;
+  // Filtreyi uygula
+  if(S.mahalFilter!=='all') eq=eq.filter(e=>getStatus(e)===S.mahalFilter);
+  // Filtre aktifken sıralama/sürükleme kapalı (kısmi liste)
+  const canReorder=canManage && S.mahalFilter==='all';
+  if(!eq.length){
+    listEl.innerHTML=filterRow+`<div class="empty-state" style="padding:24px 0"><p>Bu filtrede ekipman yok.</p></div>`;
+    listEl.querySelectorAll('.sfilter-btn').forEach(b=>b.addEventListener('click',()=>{ S.mahalFilter=b.dataset.mf; renderMahalPage(); }));
+    return;
+  }
   // order alanına göre sırala (yoksa mevcut sıra korunur)
   eq=eq.map((e,i)=>({e,o:(e.order!=null?e.order:i)})).sort((a,b)=>a.o-b.o).map(x=>x.e);
   // Kümelere göre grupla (küme yoksa "kümesiz")
@@ -3855,15 +3872,16 @@ function renderMahalPage(){
       html+=`<div class="cluster-hdr" style="opacity:.55">Kümesiz</div>`;
     }
     html+=`<div class="equip-list" data-cluster="${safe(g.name||'')}">`;
-    g.items.forEach((e,i)=>{ html+=mahalEquipRowHTML(e, i, g.items.length, canManage); });
+    g.items.forEach((e,i)=>{ html+=mahalEquipRowHTML(e, i, g.items.length, canReorder); });
     html+=`</div>`;
   });
-  listEl.innerHTML=html;
+  listEl.innerHTML=filterRow+html;
+  listEl.querySelectorAll('.sfilter-btn').forEach(b=>b.addEventListener('click',()=>{ S.mahalFilter=b.dataset.mf; renderMahalPage(); }));
   listEl.querySelectorAll('.equip-row').forEach(row=>row.addEventListener('click',ev=>{
     if(ev.target.closest('.eq-reorder')||ev.target.closest('.eq-drag')) return;
     openEquipDetail(row.dataset.eid);
   }));
-  if(canManage) wireEquipDragDrop(listEl);
+  if(canReorder) wireEquipDragDrop(listEl);
 }
 
 /* Mahal ekipman satırı — yönetici için sürükle tutamacı + ▲▼ sıra butonlarıyla sarılır */
@@ -6903,6 +6921,15 @@ function getDashCards(){
 }
 function setDashCards(arr){ try{ sessionStorage.setItem('te_dash',JSON.stringify(arr)); }catch(e){} }
 
+/* Dashboard özet kartından ekipmanlar sayfasına FİLTRELİ git */
+function dashGoEquip(filter){
+  S.filterCat=filter||'all';
+  S.searchQ=''; S.pgEquip=1;
+  const sb=document.getElementById('search-bar'); if(sb) sb.value='';
+  showPage('equipments');
+  try{ renderEquipments(); }catch(e){}
+}
+
 function renderDashboard(){
   const el=document.getElementById('dashboard-container'); if(!el) return;
   const active=getDashCards();
@@ -6941,9 +6968,9 @@ function renderDashboard(){
     html+=`<div class="ed-card" style="margin-bottom:14px">
       <p class="sec-label" style="margin-top:0">Genel Özet</p>
       <div class="hstat-grid">
-        <div class="hstat-card"><div class="hstat-icon">🔧</div><div class="hstat-num">${total}</div><div class="hstat-lbl">Ekipman</div></div>
-        <div class="hstat-card ok"><div class="hstat-icon">✅</div><div class="hstat-num">${ok}</div><div class="hstat-lbl">Uygun</div></div>
-        <div class="hstat-card fail"><div class="hstat-icon">❌</div><div class="hstat-num">${fail}</div><div class="hstat-lbl">Uygun Değil</div></div>
+        <div class="hstat-card" style="cursor:pointer" onclick="dashGoEquip('all')"><div class="hstat-icon">🔧</div><div class="hstat-num">${total}</div><div class="hstat-lbl">Ekipman</div></div>
+        <div class="hstat-card ok" style="cursor:pointer" onclick="dashGoEquip('ok')"><div class="hstat-icon">✅</div><div class="hstat-num">${ok}</div><div class="hstat-lbl">Uygun</div></div>
+        <div class="hstat-card fail" style="cursor:pointer" onclick="dashGoEquip('fail')"><div class="hstat-icon">❌</div><div class="hstat-num">${fail}</div><div class="hstat-lbl">Uygun Değil</div></div>
       </div>
       <div style="margin-top:14px">
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px"><span style="color:var(--txt2)">Uygunluk Oranı</span><span style="font-weight:700;color:var(--gtxt)">%${rate}</span></div>
