@@ -681,7 +681,7 @@ function estimateStorageBytes(){
   // Gerçek belgeler e.documents[].size'da (ekipman belgeleri) + şirket klasörleri.
   let total=0;
   (S.equips||[]).forEach(e=>{ (e.documents||[]).forEach(d=>{ total+=(d.size||0); }); });
-  (S.companyFolders||[]).forEach(f=>{ (f.documents||f.files||[]).forEach(d=>{ total+=(d.size||0); }); });
+  (S.companyFolders||[]).forEach(f=>{ (f.docs||[]).forEach(d=>{ total+=(d.size||0); }); });
   return total;
 }
 
@@ -1700,7 +1700,7 @@ async function onCompanyDocSelected(ev){
     await new Promise((res,rej)=>{ task.on('state_changed', s=>{ updatePersistentToast(t,`⬆️ Yükleniyor… %${Math.round(s.bytesTransferred/s.totalBytes*100)}`); }, rej, res); });
     const url=await ref.getDownloadURL();
     if(!f.docs) f.docs=[];
-    f.docs.push({ id:docId, name:file.name, type:file.type, path, url, ts:Date.now() });
+    f.docs.push({ id:docId, name:file.name, type:file.type, path, url, size:(file.size||0), ts:Date.now() });
     await save();
     hidePersistentToast(t);
     renderCompanyDocs();
@@ -1822,7 +1822,7 @@ async function onGlobalDocSelected(ev){
     await new Promise((res,rej)=>{ task.on('state_changed', s=>{ updatePersistentToast(t,`⬆️ Yükleniyor… %${Math.round(s.bytesTransferred/s.totalBytes*100)}`); }, rej, res); });
     const url=await ref.getDownloadURL();
     if(!f.docs) f.docs=[];
-    f.docs.push({ id:docId, name:file.name, type:file.type, path, url, ts:Date.now() });
+    f.docs.push({ id:docId, name:file.name, type:file.type, path, url, size:(file.size||0), ts:Date.now() });
     await saveGlobalDocs();
     hidePersistentToast(t);
     renderGlobalDocs();
