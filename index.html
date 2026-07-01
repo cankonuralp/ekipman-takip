@@ -3308,14 +3308,18 @@ function showCompanySidebar(){
 /* Paneli üst bar (mor bant + topbar) ALTINA, alt navbar ÜSTÜNE hizala.
    Topbar tam genişlik kaldığı için panel onun altından başlamalı. */
 function positionSidebar(){
-  const sb=document.getElementById('company-sidebar');
-  if(!sb || sb.style.display==='none') return;
   const band=document.getElementById('super-company-band');
   const topbar=document.querySelector('#app .topbar');
+  const bandShown = band && band.style.display!=='none';
+  const bandH = bandShown ? band.offsetHeight : 0;
+  // Topbar'ı bandın ALTINA sabitle: band sticky top:0, topbar sticky top:bandH → çakışma/boşluk YOK.
+  // Band yoksa topbar CSS varsayılanına (top:0) döner.
+  if(topbar) topbar.style.top = bandH ? bandH+'px' : '';
+  // Sidebar hizalama (yalnızca geniş ekranda gösterilir)
+  const sb=document.getElementById('company-sidebar');
+  if(!sb || sb.style.display==='none') return;
   const nav=document.querySelector('#app .bottom-nav');
-  let top=0;
-  if(band && band.style.display!=='none' && band.offsetParent!==null) top+=band.offsetHeight;
-  if(topbar) top+=topbar.offsetHeight;
+  const top = bandH + (topbar?topbar.offsetHeight:0);
   if(top>0) sb.style.top=top+'px';
   sb.style.bottom=(nav?nav.offsetHeight:0)+'px';
 }
@@ -5306,8 +5310,8 @@ function updateCompanyBanner(){
       band=document.createElement('div');
       band.id='super-company-band';
       // padding-top'a safe-area: iPhone çentik/durum çubuğu altında kalmasın ("← Şirketler" tuşu erişilebilir olsun)
-      // relative (sticky DEĞİL) — topbar'la üst üste binmesin; kaydırınca akıp gider, topbar temiz sticky kalır
-      band.style.cssText='position:relative;z-index:60;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:calc(8px + env(safe-area-inset-top)) 16px 8px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px';
+      // sticky top:0 — kaydırınca KAYBOLMAZ; topbar JS ile bandın ALTINA sabitlenir (üst üste binmez, boşluk olmaz)
+      band.style.cssText='position:sticky;top:0;z-index:102;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:calc(8px + env(safe-area-inset-top)) 16px 8px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px';
       const app=document.getElementById('app');
       app.insertBefore(band, app.firstChild);
     }
@@ -5723,13 +5727,18 @@ function _renderHomeRest(now){
       </div>
       <div class="hstat-card ok" style="cursor:pointer" onclick="S.reportFilter='ok';showPage('reports')">
         <div class="hstat-icon">✅</div>
-        <div class="hstat-num">${ayRpts.filter(r=>r.result==='ok').length}</div>
+        <div class="hstat-num">${ayRpts.filter(r=>r.result==='ok'&&!r.incomplete).length}</div>
         <div class="hstat-lbl">Uygun</div>
       </div>
       <div class="hstat-card fail" style="cursor:pointer" onclick="S.reportFilter='fail';showPage('reports')">
         <div class="hstat-icon">❌</div>
-        <div class="hstat-num">${ayRpts.filter(r=>r.result==='fail').length}</div>
+        <div class="hstat-num">${ayRpts.filter(r=>r.result==='fail'&&!r.incomplete).length}</div>
         <div class="hstat-lbl">Uygun Değil</div>
+      </div>
+      <div class="hstat-card pend" style="cursor:pointer" onclick="S.reportFilter='incomplete';showPage('reports')">
+        <div class="hstat-icon">⏳</div>
+        <div class="hstat-num">${ayRpts.filter(r=>r.incomplete).length}</div>
+        <div class="hstat-lbl">Yarım</div>
       </div>
     </div>`;
 
@@ -8154,7 +8163,7 @@ function renderReports(){
   // Filtre chips
   const wrap=document.getElementById('report-filter-chips');
   if(wrap){
-    const chips=[{id:'all',l:'Tümü'},{id:'ok',l:'✅ Uygun'},{id:'fail',l:'❌ Sorunlu'}];
+    const chips=[{id:'all',l:'Tümü'},{id:'ok',l:'✅ Uygun'},{id:'fail',l:'❌ Sorunlu'},{id:'incomplete',l:'⏳ Yarım'}];
     let html=chips.map(c=>`<button class="chip${S.reportFilter===c.id?' active':''}" data-rf="${c.id}">${c.l}</button>`).join('');
     // Mahal (otel) filtresi — birden fazla mahal varsa göster
     if(S.mahals.length>1){
@@ -8171,7 +8180,8 @@ function renderReports(){
 
   const q=S.reportQ.toLowerCase();
   let list=[...S.reports].sort((a,b)=>b.createdAt>a.createdAt?1:-1);
-  if(S.reportFilter!=='all') list=list.filter(r=>r.result===S.reportFilter);
+  if(S.reportFilter==='incomplete') list=list.filter(r=>r.incomplete);
+  else if(S.reportFilter!=='all') list=list.filter(r=>r.result===S.reportFilter && !r.incomplete);
   // Mahal filtresi
   if(S.reportMahalFilter && S.reportMahalFilter!=='all'){
     const mName=mahalById(S.reportMahalFilter)?.name;
