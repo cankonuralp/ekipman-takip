@@ -3213,7 +3213,8 @@ function updateCompanyBanner(){
       band=document.createElement('div');
       band.id='super-company-band';
       // padding-top'a safe-area: iPhone çentik/durum çubuğu altında kalmasın ("← Şirketler" tuşu erişilebilir olsun)
-      band.style.cssText='position:sticky;top:0;z-index:101;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:calc(8px + env(safe-area-inset-top)) 16px 8px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px';
+      // relative (sticky DEĞİL) — topbar'la üst üste binmesin; kaydırınca akıp gider, topbar temiz sticky kalır
+      band.style.cssText='position:relative;z-index:60;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:calc(8px + env(safe-area-inset-top)) 16px 8px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px';
       const app=document.getElementById('app');
       app.insertBefore(band, app.firstChild);
     }
@@ -5811,10 +5812,10 @@ async function saveInspection(complete){
       });
       if(S.notifications.length>100) S.notifications=S.notifications.slice(0,100);
     }
-    // Bildirim: uygunsuzluk (fail) HER ZAMAN yöneticilere gider (kritik, kutuya bağlı değil);
-    // uygun (ok) ise yalnızca "bildirim gönder" kutusu işaretliyse gider.
-    const wantNotify=document.getElementById('insp-notify')?.checked;
-    if(result==='fail' || wantNotify){
+    // HER tamamlanan denetim yöneticilere bildirilir (uygun/uygunsuz fark etmez).
+    // Kimin GÖRECEĞİ alıcı-kapısında belirlenir: admin, süper admin, yönetici(rol≥3) veya "Bildirim Al" yetkisi.
+    // (fail→ok geçişi zaten yukarıda "giderildi" olarak bildirildiği için burada tekrarlanmaz.)
+    if(!(prevStatus==='fail' && result==='ok')){
       const fails=collectFailLabels(_insp.form, allAnswers);
       let msg, type;
       if(result==='fail'){ type='fail'; msg=`${fails.length?fails.join(', '):'Denetim'} sebebiyle ${m?.name||''} lokasyonundaki "${e.name}" ekipmanı uygunsuzdur.`; }
