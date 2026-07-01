@@ -4970,9 +4970,17 @@ async function uploadDocBlob(blob, name, type){
 
 /* ── TARAYICI (çoklu sayfa → tek PDF) ── */
 let _scanStream=null;
-let _scanRawPages=[];   // ham (orijinal renkli) sayfalar — filtre uygulanmadan
+let _scanRawPages=[];   // ham (kırpılmış, renkli) sayfalar — filtre uygulanmadan
 let _scanFilter='color'; // aktif filtre: color | enhance | gray | bw
 let _scanRafId=null;     // kenar overlay animasyon
+let _scanPaused=false;   // kırpma ekranındayken canlı overlay'i durdur
+// Köşe-ayarlama (kırpma) durumu
+let _scanCropSrc=null;       // çekilen ham foto (dataURL)
+let _scanCropNat=null;       // {w,h} orijinal boyut
+let _scanCropCorners=null;   // 4 köşe [tl,tr,br,bl] orijinal koordinatta
+let _scanCropDrag=null;      // sürüklenen köşe index'i
+let _cropMap={s:1,ox:0,oy:0};// ekran<->orijinal ölçek/offset
+let _cropHandlersSet=false;
 
 async function startScanner(){
   closeModal('modal-doc-source');
@@ -4982,6 +4990,8 @@ async function startScanner(){
   if(screen) screen.style.display='flex';
   document.getElementById('scanner-camera-view').style.display='flex';
   document.getElementById('scanner-review-view').style.display='none';
+  const cropV=document.getElementById('scanner-crop-view'); if(cropV) cropV.style.display='none';
+  _scanPaused=false;
   updateScanCount();
   // OpenCV'yi arka planda yüklemeye başla (kenar tespiti için, beklemeden)
   loadOpenCV().catch(()=>{});
@@ -5011,7 +5021,9 @@ function closeScanner(){
   stopScanner();
   const screen=document.getElementById('scanner-screen');
   if(screen) screen.style.display='none';
+  const cropV=document.getElementById('scanner-crop-view'); if(cropV) cropV.style.display='none';
   _scanPages=[]; _scanRawPages=[];
+  _scanPaused=false; _scanCropSrc=null; _scanCropCorners=null; _scanCropDrag=null;
 }
 
 function updateScanCount(){
@@ -5034,6 +5046,7 @@ function startEdgeOverlay(){
   function draw(){
     if(!_scanStream){ return; }
     _scanRafId=requestAnimationFrame(draw);
+    if(_scanPaused) return; // kırpma ekranındayken dur
     frameCount++;
     if(frameCount%6!==0) return; // performans: her 6 karede bir
     if(!video.videoWidth) return;
@@ -5067,7 +5080,7 @@ function startEdgeOverlay(){
   draw();
 }
 
-/* Sayfa çek — orijinal renkli yüksek çözünürlük yakala */
+/* Sayfa çek — yüksek çözünürlük yakala, sonra KÖŞE AYARLAMA ekranına geç */
 async function captureScanPage(){
   const video=document.getElementById('scanner-video');
   if(!video||!video.videoWidth){ toast('Kamera henüz hazır değil'); return; }
@@ -5080,17 +5093,151 @@ async function captureScanPage(){
   if(w>maxDim||h>maxDim){ if(w>h){ h=Math.round(h*maxDim/w); w=maxDim; } else { w=Math.round(w*maxDim/h); h=maxDim; } }
   canvas.width=w; canvas.height=h;
   canvas.getContext('2d').drawImage(video,0,0,w,h);
-  let rawUrl=canvas.toDataURL('image/jpeg',0.92);
-  // Otomatik kenar tespiti + perspektif düzeltme (renkli korunur)
-  const t=showPersistentToast('🔍 Belge işleniyor…');
-  try{ rawUrl=await cropDocument(rawUrl); }catch(e){}
-  hidePersistentToast(t);
-  _scanRawPages.push(rawUrl);
-  updateScanCount();
-  // Küçük önizleme göster
-  const thumb=document.getElementById('scanner-thumb');
-  if(thumb){ thumb.style.display='block'; thumb.innerHTML=`<img src="${rawUrl}" style="width:100%;height:100%;object-fit:cover"/>`; }
-  toast('📄 Sayfa '+_scanRawPages.length+' eklendi');
+  const url=canvas.toDataURL('image/jpeg',0.92);
+  openCropView(url);
+}
+
+/* ── KÖŞE AYARLAMA (elle kırpma) — gerçek "tarama" hissini veren adım ── */
+async function openCropView(dataUrl){
+  _scanCropSrc=dataUrl;
+  _scanPaused=true; // canlı overlay dursun
+  const img=new Image();
+  img.onload=async ()=>{
+    _scanCropNat={w:img.naturalWidth, h:img.naturalHeight};
+    // Otomatik köşe tahmini (varsa) — kullanıcı yine de düzeltebilir
+    let corners=null;
+    try{
+      await loadOpenCV();
+      if(_cvReady && window.cv){
+        const c=document.createElement('canvas');
+        const sc=Math.min(1, 1000/Math.max(img.naturalWidth,img.naturalHeight));
+        c.width=Math.round(img.naturalWidth*sc); c.height=Math.round(img.naturalHeight*sc);
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        const src=cv.imread(c);
+        const dc=detectDocCorners(src); src.delete();
+        if(dc) corners=orderCorners(dc).map(p=>({x:p.x/sc, y:p.y/sc}));
+      }
+    }catch(e){}
+    if(!corners){
+      const mx=_scanCropNat.w*0.06, my=_scanCropNat.h*0.06;
+      corners=[{x:mx,y:my},{x:_scanCropNat.w-mx,y:my},{x:_scanCropNat.w-mx,y:_scanCropNat.h-my},{x:mx,y:_scanCropNat.h-my}];
+    }
+    _scanCropCorners=corners;
+    document.getElementById('scanner-crop-img').src=dataUrl;
+    document.getElementById('scanner-camera-view').style.display='none';
+    document.getElementById('scanner-review-view').style.display='none';
+    document.getElementById('scanner-crop-view').style.display='flex';
+    document.getElementById('scanner-title').textContent='Köşeleri Ayarla';
+    setTimeout(initCropStage, 60);
+  };
+  img.onerror=()=>{ _scanPaused=false; toast('Görüntü yüklenemedi'); };
+  img.src=dataUrl;
+}
+
+function drawCropOverlay(){
+  const stage=document.getElementById('scanner-crop-stage');
+  const cnv=document.getElementById('scanner-crop-canvas');
+  if(!stage||!cnv||!_scanCropNat||!_scanCropCorners) return;
+  const cw=stage.clientWidth, ch=stage.clientHeight;
+  cnv.width=cw; cnv.height=ch;
+  const s=Math.min(cw/_scanCropNat.w, ch/_scanCropNat.h);
+  const ox=(cw-_scanCropNat.w*s)/2, oy=(ch-_scanCropNat.h*s)/2;
+  _cropMap={s,ox,oy};
+  const ctx=cnv.getContext('2d');
+  ctx.clearRect(0,0,cw,ch);
+  const pts=_scanCropCorners.map(p=>({x:ox+p.x*s, y:oy+p.y*s}));
+  ctx.strokeStyle='#22c55e'; ctx.lineWidth=2.5; ctx.fillStyle='rgba(34,197,94,.14)';
+  ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y); for(let i=1;i<4;i++)ctx.lineTo(pts[i].x,pts[i].y); ctx.closePath(); ctx.fill(); ctx.stroke();
+  pts.forEach(p=>{ ctx.beginPath(); ctx.arc(p.x,p.y,12,0,7); ctx.fillStyle='rgba(255,255,255,.92)'; ctx.fill(); ctx.lineWidth=2.5; ctx.strokeStyle='#16a34a'; ctx.stroke(); });
+}
+
+function initCropStage(){
+  drawCropOverlay();
+  const cnv=document.getElementById('scanner-crop-canvas');
+  if(!cnv||_cropHandlersSet) return;
+  _cropHandlersSet=true;
+  const at=(e)=>{ const r=cnv.getBoundingClientRect(); return {sx:e.clientX-r.left, sy:e.clientY-r.top}; };
+  cnv.addEventListener('pointerdown',(e)=>{
+    if(!_scanCropCorners) return;
+    e.preventDefault();
+    const {sx,sy}=at(e);
+    let best=-1, bd=1e9;
+    _scanCropCorners.forEach((p,i)=>{ const px=_cropMap.ox+p.x*_cropMap.s, py=_cropMap.oy+p.y*_cropMap.s; const d=Math.hypot(px-sx,py-sy); if(d<bd){bd=d;best=i;} });
+    if(bd<44){ _scanCropDrag=best; try{cnv.setPointerCapture(e.pointerId);}catch(_){} }
+  });
+  cnv.addEventListener('pointermove',(e)=>{
+    if(_scanCropDrag==null) return;
+    e.preventDefault();
+    const {sx,sy}=at(e);
+    let nx=(sx-_cropMap.ox)/_cropMap.s, ny=(sy-_cropMap.oy)/_cropMap.s;
+    nx=Math.max(0,Math.min(_scanCropNat.w,nx)); ny=Math.max(0,Math.min(_scanCropNat.h,ny));
+    _scanCropCorners[_scanCropDrag]={x:nx,y:ny};
+    drawCropOverlay();
+  });
+  const end=()=>{ _scanCropDrag=null; };
+  cnv.addEventListener('pointerup',end);
+  cnv.addEventListener('pointercancel',end);
+}
+
+function cropFullPage(){
+  if(!_scanCropNat) return;
+  _scanCropCorners=[{x:0,y:0},{x:_scanCropNat.w,y:0},{x:_scanCropNat.w,y:_scanCropNat.h},{x:0,y:_scanCropNat.h}];
+  drawCropOverlay();
+}
+
+function backToCameraFromCrop(){
+  const cropV=document.getElementById('scanner-crop-view'); if(cropV) cropV.style.display='none';
+  const camV=document.getElementById('scanner-camera-view'); if(camV) camV.style.display='flex';
+  document.getElementById('scanner-title').textContent='Belge Tarayıcı';
+  _scanPaused=false;
+}
+function cropRetake(){ backToCameraFromCrop(); }
+
+async function applyCropAddPage(){
+  if(!_scanCropSrc||!_scanCropCorners){ backToCameraFromCrop(); return; }
+  const t=showPersistentToast('🔍 Kırpılıyor…');
+  try{
+    const url=await warpFromCorners(_scanCropSrc, _scanCropCorners);
+    _scanRawPages.push(url);
+    updateScanCount();
+    const thumb=document.getElementById('scanner-thumb');
+    if(thumb){ thumb.style.display='block'; thumb.innerHTML=`<img src="${url}" style="width:100%;height:100%;object-fit:cover"/>`; }
+    hidePersistentToast(t);
+    backToCameraFromCrop();
+    toast('📄 Sayfa '+_scanRawPages.length+' eklendi');
+  }catch(e){ hidePersistentToast(t); toast('❌ Kırpılamadı: '+(e.message||'')); }
+}
+
+/* Verilen 4 köşeye göre perspektif düzelt → düz belge (dataURL). cv yoksa eksen-hizalı kırpar */
+function warpFromCorners(dataUrl, corners){
+  return new Promise((resolve)=>{
+    const img=new Image();
+    img.onload=async ()=>{
+      try{ await loadOpenCV(); }catch(e){}
+      const canvas=document.createElement('canvas');
+      canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
+      canvas.getContext('2d').drawImage(img,0,0);
+      if(_cvReady && window.cv){
+        try{
+          const src=cv.imread(canvas);
+          const warped=warpDocumentMat(src, corners); src.delete();
+          const out=document.createElement('canvas');
+          cv.imshow(out, warped); warped.delete();
+          resolve(out.toDataURL('image/jpeg',0.92)); return;
+        }catch(e){}
+      }
+      // Yedek: eksen-hizalı kırpma
+      const xs=corners.map(p=>p.x), ys=corners.map(p=>p.y);
+      const x0=Math.max(0,Math.min(...xs)), y0=Math.max(0,Math.min(...ys));
+      const x1=Math.min(canvas.width,Math.max(...xs)), y1=Math.min(canvas.height,Math.max(...ys));
+      const cw=Math.max(1,Math.round(x1-x0)), ch=Math.max(1,Math.round(y1-y0));
+      const out=document.createElement('canvas'); out.width=cw; out.height=ch;
+      out.getContext('2d').drawImage(canvas, x0,y0,cw,ch, 0,0,cw,ch);
+      resolve(out.toDataURL('image/jpeg',0.92));
+    };
+    img.onerror=()=>resolve(dataUrl);
+    img.src=dataUrl;
+  });
 }
 
 
@@ -5365,8 +5512,8 @@ async function renderReviewPages(){
   if(!wrap) return;
   const rendered=[];
   for(let i=0;i<_scanRawPages.length;i++){
-    const img=_scanRawPages[i];   // orijinal renkli (kırpılmış), filtre yok
-    _scanPages[i]=img;            // PDF için sakla
+    const img=await applyScanFilter(_scanRawPages[i], _scanFilter); // seçili filtreyi uygula
+    _scanPages[i]=img;            // PDF için sakla (filtreli)
     rendered.push(`
       <div class="scan-review-page">
         <span class="scan-page-num">${i+1}</span>
