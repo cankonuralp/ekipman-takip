@@ -2689,6 +2689,30 @@ async function saveReportSafe(rpt){
   return save();
 }
 
+/* Bildirimi çakışmaya karşı GÜVENLİ ekle — sadece 'notifications' dalını çek+birleştir+yaz.
+   Böylece saveReportSafe/save() sırasındaki tüm-node dinleyicisi yeni bildirimi EZMEZ.
+   (notifyManagers ile aynı sonuç: eklenen bildirim kaybolmadan Firebase'e yazılır.) */
+async function saveNotifSafe(notif){
+  if(!_ref || !notif) return;
+  if(_fbConnected){
+    try{
+      const snap=await _ref.child('notifications').get();
+      let fresh=snap.exists()?snap.val():[];
+      if(fresh && !Array.isArray(fresh)) fresh=Object.values(fresh);
+      if(!Array.isArray(fresh)) fresh=[];
+      fresh.unshift(notif);
+      if(fresh.length>100) fresh=fresh.slice(0,100);
+      S.notifications=fresh;                       // yerel state'i taze veriyle hizala
+      await _ref.child('notifications').set(fresh);
+      return true;
+    }catch(e){ console.warn('saveNotifSafe merge hatası:', e.message); }
+  }
+  // Offline/hata: normal ekle + tam kayıt (Firebase kuyruğa alır)
+  S.notifications.unshift(notif);
+  if(S.notifications.length>100) S.notifications=S.notifications.slice(0,100);
+  return save();
+}
+
 /* Bağlantı/senkron durumunu üst şeride yansıt */
 function updateConnStatus(){
   const el=document.getElementById('conn-status');
@@ -5791,6 +5815,10 @@ async function saveInspection(complete){
   rpt.formAnswers=allAnswers;
   rpt.incomplete=!complete;  // true = devam ediyor, false = tamamlandı
 
+  // Bildirimler burada TOPLANIR, rapor kaydından SONRA saveNotifSafe ile güvenli yazılır.
+  // (Aksi halde saveReportSafe'in tetiklediği tüm-node dinleyicisi yeni bildirimi EZER — "kutu çalışmıyor" bug'ı.)
+  const pendingNotifs=[];
+
   if(complete){
     // Final: ekipmanın son durumunu güncelle
     e.lastInsp={date:nowStr(),by,result,formAnswers:allAnswers};
@@ -5804,13 +5832,12 @@ async function saveInspection(complete){
 
     // Otomatik bildirim: uygunsuzluk giderildi (önceki fail → şimdi ok)
     if(prevStatus==='fail' && result==='ok'){
-      S.notifications.unshift({
+      pendingNotifs.push({
         id:'n'+Date.now()+'r', reportId:rpt.id, equipName:e.name, mahalName:m?.name||'—',
         result:'resolved', type:'resolved', by,
         note:`✅ ${m?.name||''} lokasyonundaki "${e.name}" ekipmanındaki uygunsuzluk giderildi.`,
         date:nowStr(), ts:Date.now(), readBy:[]
       });
-      if(S.notifications.length>100) S.notifications=S.notifications.slice(0,100);
     }
     // Bildirim YALNIZCA "Yöneticilere bildirim gönder" kutusu işaretliyse gider (kutu ana anahtar).
     // İşaretlenince kimin GÖRECEĞİ alıcı-kapısında belirlenir: admin, süper admin, yönetici(rol≥3)
@@ -5821,8 +5848,7 @@ async function saveInspection(complete){
       if(result==='fail'){ type='fail'; msg=`${fails.length?fails.join(', '):'Denetim'} sebebiyle ${m?.name||''} lokasyonundaki "${e.name}" ekipmanı uygunsuzdur.`; }
       else { type='ok'; msg=`${m?.name||''} lokasyonundaki "${e.name}" denetlendi — uygun.`; }
       if(note) msg+=` Not: ${note}`;
-      S.notifications.unshift({id:'n'+Date.now(),reportId:rpt.id,equipName:e.name,mahalName:m?.name||'—',result,type,by,note:msg,date:nowStr(),ts:Date.now(),readBy:[]});
-      if(S.notifications.length>100) S.notifications=S.notifications.slice(0,100);
+      pendingNotifs.push({id:'n'+Date.now(),reportId:rpt.id,equipName:e.name,mahalName:m?.name||'—',result,type,by,note:msg,date:nowStr(),ts:Date.now(),readBy:[]});
     }
   } else {
     // Taslak/devam: rapor listesine ekle (yoksa) ama ekipman son durumunu DEĞİŞTİRME
@@ -5832,11 +5858,10 @@ async function saveInspection(complete){
       // Aynı rapor için tekrar yarım-bildirimi ekleme (spam önle)
       const dup=S.notifications.some(n=>n.type==='incomplete'&&n.reportId===rpt.id);
       if(!dup){
-        S.notifications.unshift({id:'n'+Date.now()+'i', reportId:rpt.id, equipName:e.name, mahalName:m?.name||'—',
+        pendingNotifs.push({id:'n'+Date.now()+'i', reportId:rpt.id, equipName:e.name, mahalName:m?.name||'—',
           result:'pend', type:'incomplete', by,
           note:`⏳ ${m?.name||''} lokasyonundaki "${e.name}" denetimi YARIM bırakıldı — tamamlanmayı bekliyor.${note?' Not: '+note:''}`,
           date:nowStr(), ts:Date.now(), readBy:[]});
-        if(S.notifications.length>100) S.notifications=S.notifications.slice(0,100);
       }
     }
   }
@@ -5844,10 +5869,12 @@ async function saveInspection(complete){
   try{
     // Raporu çakışmaya karşı güvenli kaydet (başka cihazın raporlarını ezmez)
     await saveReportSafe(rpt);
-    // Ekipman durumu + log/bildirim için ek kayıt (tamamlanınca)
+    // Ekipman durumu + log için ek kayıt (tamamlanınca)
     if(complete){
-      try{ await save(); }catch(e){} // ikincil veriler (lastInsp, log, bildirim)
+      try{ await save(); }catch(e){} // ikincil veriler (lastInsp, log, aktivite)
     }
+    // Bildirimleri GÜVENLİ yaz — rapor/ana kayıttan SONRA (dinleyici ezmesin, screenshot 2 bug fix)
+    for(const n of pendingNotifs){ try{ await saveNotifSafe(n); }catch(e){} }
     if(complete){
       clearInspDraft(_insp.equipId);
       closeModal('modal-insp'); clearActiveInspection(); detachCollabListener();
