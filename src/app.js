@@ -1226,7 +1226,8 @@ function logSuperActivity(type, desc){
 /* ── ŞİRKET PANELİ (süper admin, sol kenar sabit) ── */
 function showCompanySidebar(){
   const sb=document.getElementById('company-sidebar');
-  if(sb && window.innerWidth>=1280){
+  // SADECE süper admin görür (şirketler arası geçiş paneli). Normal kullanıcı ASLA görmez.
+  if(sb && S.cur?.isSuper && window.innerWidth>=1280){
     sb.style.display='flex';
     document.body.classList.add('has-company-sidebar');
   } else {
@@ -1704,6 +1705,7 @@ async function onCompanyDocSelected(ev){
     await save();
     hidePersistentToast(t);
     renderCompanyDocs();
+    try{ renderFbUsage(); }catch(e){}   // depolama barını hemen güncelle
     toast('✅ Belge yüklendi');
   }catch(e){ hidePersistentToast(t); toast('❌ Yükleme başarısız: '+(e.message||''),5000); }
 }
@@ -3095,6 +3097,7 @@ function stopSessionTimer(){
 function bootApp(){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='block';
+  hideCompanySidebar();   // normal kullanıcı süper admin panelini görmez (önceki oturumdan kalmasın)
   applyPerms();
   updateTopbar();
   updateNotifBell();
@@ -4194,6 +4197,7 @@ async function uploadDocBlob(blob, name, type){
     hidePersistentToast(loadingToast);
     toast('✅ Belge yüklendi: '+name);
     renderEquipDetail();
+    try{ renderFbUsage(); }catch(e){}   // depolama barını hemen güncelle
   }catch(err){
     hidePersistentToast(loadingToast);
     if(err.code==='storage/unauthorized') toast('🔒 Yetki hatası — belge yüklenemedi',5000);
