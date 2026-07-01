@@ -1768,30 +1768,10 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
     </div>
   </div>
 
-  <!-- KÖŞE AYARLAMA (KIRPMA) GÖRÜNÜMÜ -->
-  <div id="scanner-crop-view" style="display:none;flex:1;flex-direction:column;min-height:0;background:#0a0a0a">
-    <div id="scanner-crop-stage" style="flex:1;position:relative;overflow:hidden;min-height:0;touch-action:none">
-      <img id="scanner-crop-img" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none" alt=""/>
-      <canvas id="scanner-crop-canvas" style="position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab"></canvas>
-    </div>
-    <div style="text-align:center;color:#9ca3af;font-size:12px;padding:9px 16px 2px">✥ Yeşil köşeleri sürükleyip belgeyi hizala</div>
-    <div style="display:flex;gap:10px;padding:10px 16px calc(14px + env(safe-area-inset-bottom));background:#000;flex-shrink:0">
-      <button class="btn btn-secondary" style="flex:1" onclick="cropRetake()">↺ Yeniden Çek</button>
-      <button class="btn btn-secondary" style="flex:0 0 auto;padding:0 16px" onclick="cropFullPage()" title="Tüm sayfa">⛶</button>
-      <button class="btn btn-primary" style="flex:1.5" onclick="applyCropAddPage()">✓ Kırp &amp; Ekle</button>
-    </div>
-  </div>
-
   <!-- ÖNİZLEME / DÜZENLEME GÖRÜNÜMÜ -->
   <div id="scanner-review-view" style="display:none;flex:1;flex-direction:column;min-height:0;background:#15171a">
-    <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px 12px;background:#000;flex-shrink:0">
-      <button class="scan-filter-btn active" data-filter="color" onclick="setScanFilter('color')">🎨 Renkli</button>
-      <button class="scan-filter-btn" data-filter="enhance" onclick="setScanFilter('enhance')">✨ Netleştir</button>
-      <button class="scan-filter-btn" data-filter="gray" onclick="setScanFilter('gray')">◑ Gri</button>
-      <button class="scan-filter-btn" data-filter="bw" onclick="setScanFilter('bw')">📄 S/B</button>
-    </div>
     <div style="flex:1;overflow-y:auto;padding:16px;min-height:0">
-      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-bottom:14px">Sayfaları kontrol edin. Filtre seçin, sıralayın veya silin. Onaylayınca PDF oluşturulur.</p>
+      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-bottom:14px">Sayfaları kontrol edin. Sıralayın veya silin. Onaylayınca PDF oluşturulur.</p>
       <div id="scanner-review-pages" style="display:flex;flex-direction:column;gap:12px;max-width:420px;margin:0 auto"></div>
     </div>
     <!-- Alt onay -->
@@ -7212,8 +7192,16 @@ async function captureScanPage(){
   if(w>maxDim||h>maxDim){ if(w>h){ h=Math.round(h*maxDim/w); w=maxDim; } else { w=Math.round(w*maxDim/h); h=maxDim; } }
   canvas.width=w; canvas.height=h;
   canvas.getContext('2d').drawImage(video,0,0,w,h);
-  const url=canvas.toDataURL('image/jpeg',0.92);
-  openCropView(url);
+  let url=canvas.toDataURL('image/jpeg',0.92);
+  // Arka planda otomatik belge düzeltme (kenar bulursa perspektif düzeltir, bulamazsa fotoğrafı bırakır) — kullanıcıya soru yok
+  const t=showPersistentToast('🔍 Belge işleniyor…');
+  try{ url=await cropDocument(url); }catch(e){}
+  hidePersistentToast(t);
+  _scanRawPages.push(url);
+  updateScanCount();
+  const thumb=document.getElementById('scanner-thumb');
+  if(thumb){ thumb.style.display='block'; thumb.innerHTML=`<img src="${url}" style="width:100%;height:100%;object-fit:cover"/>`; }
+  toast('📄 Sayfa '+_scanRawPages.length+' eklendi');
 }
 
 /* ── KÖŞE AYARLAMA (elle kırpma) — gerçek "tarama" hissini veren adım ── */
@@ -7631,8 +7619,8 @@ async function renderReviewPages(){
   if(!wrap) return;
   const rendered=[];
   for(let i=0;i<_scanRawPages.length;i++){
-    const img=await applyScanFilter(_scanRawPages[i], _scanFilter); // seçili filtreyi uygula
-    _scanPages[i]=img;            // PDF için sakla (filtreli)
+    const img=_scanRawPages[i];   // olduğu gibi (otomatik düzeltilmiş belge)
+    _scanPages[i]=img;            // PDF için sakla
     rendered.push(`
       <div class="scan-review-page">
         <span class="scan-page-num">${i+1}</span>

@@ -5093,8 +5093,16 @@ async function captureScanPage(){
   if(w>maxDim||h>maxDim){ if(w>h){ h=Math.round(h*maxDim/w); w=maxDim; } else { w=Math.round(w*maxDim/h); h=maxDim; } }
   canvas.width=w; canvas.height=h;
   canvas.getContext('2d').drawImage(video,0,0,w,h);
-  const url=canvas.toDataURL('image/jpeg',0.92);
-  openCropView(url);
+  let url=canvas.toDataURL('image/jpeg',0.92);
+  // Arka planda otomatik belge düzeltme (kenar bulursa perspektif düzeltir, bulamazsa fotoğrafı bırakır) — kullanıcıya soru yok
+  const t=showPersistentToast('🔍 Belge işleniyor…');
+  try{ url=await cropDocument(url); }catch(e){}
+  hidePersistentToast(t);
+  _scanRawPages.push(url);
+  updateScanCount();
+  const thumb=document.getElementById('scanner-thumb');
+  if(thumb){ thumb.style.display='block'; thumb.innerHTML=`<img src="${url}" style="width:100%;height:100%;object-fit:cover"/>`; }
+  toast('📄 Sayfa '+_scanRawPages.length+' eklendi');
 }
 
 /* ── KÖŞE AYARLAMA (elle kırpma) — gerçek "tarama" hissini veren adım ── */
@@ -5512,8 +5520,8 @@ async function renderReviewPages(){
   if(!wrap) return;
   const rendered=[];
   for(let i=0;i<_scanRawPages.length;i++){
-    const img=await applyScanFilter(_scanRawPages[i], _scanFilter); // seçili filtreyi uygula
-    _scanPages[i]=img;            // PDF için sakla (filtreli)
+    const img=_scanRawPages[i];   // olduğu gibi (otomatik düzeltilmiş belge)
+    _scanPages[i]=img;            // PDF için sakla
     rendered.push(`
       <div class="scan-review-page">
         <span class="scan-page-num">${i+1}</span>
