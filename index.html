@@ -1679,13 +1679,18 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
     </div>
     <div class="form-group">
       <label class="form-label">🔔 BİLDİRİMLER</label>
-      <input class="form-input" id="ret-notifications" type="number" min="1" placeholder="90"/>
-      <p style="font-size:11px;color:var(--txt3);margin-top:4px">Varsayılan: 90 gün (3 ay)</p>
+      <input class="form-input" id="ret-notifications" type="number" min="1" placeholder="30"/>
+      <p style="font-size:11px;color:var(--txt3);margin-top:4px">Varsayılan: 30 gün</p>
     </div>
     <div class="form-group">
       <label class="form-label">📊 LOG / AKTİVİTE KAYITLARI</label>
-      <input class="form-input" id="ret-logs" type="number" min="1" placeholder="90"/>
-      <p style="font-size:11px;color:var(--txt3);margin-top:4px">Varsayılan: 90 gün (3 ay)</p>
+      <input class="form-input" id="ret-logs" type="number" min="1" placeholder="30"/>
+      <p style="font-size:11px;color:var(--txt3);margin-top:4px">Varsayılan: 30 gün</p>
+    </div>
+    <div class="form-group">
+      <label class="form-label">🗂️ TAMAMLANAN İŞ EMİRLERİ</label>
+      <input class="form-input" id="ret-workorders" type="number" min="1" placeholder="30"/>
+      <p style="font-size:11px;color:var(--txt3);margin-top:4px">Varsayılan: 30 gün · Açık/onay bekleyenler silinmez</p>
     </div>
     <button class="btn btn-primary btn-full" id="btn-save-retention" style="margin-top:8px">💾 Kaydet</button>
   </div>
@@ -2379,13 +2384,16 @@ const PERM_DEFS = [
   {id:'delete_report',label:'Rapor Sil',          desc:'Denetim raporu sil'},
   {id:'view_notifications', label:'Bildirim Al',  desc:'Uygunsuzluk/gecikme bildirimleri alır'},
   {id:'maint_warn',   label:'Bakım Uyarısı Al',   desc:'Dış kaynaklı bakım yaklaşınca uyarı alır'},
+  {id:'view_docs',    label:'Belgeleri Gör',      desc:'Belgeler panelini görüntüler (yetki yoksa panel gizli)'},
+  {id:'manage_docs',  label:'Belge Yönetimi',     desc:'Klasör/belge ekle-sil, taşı, yükle'},
+  {id:'manage_workorders', label:'İş Emri Oluştur', desc:'Yeni iş emri girer ve atar'},
 ];
 
 // Varsayılan rol yetkileri (admin tümü; diğerleri kademeli)
 const DEFAULT_ROLE_PERMS = {
   admin:     PERM_DEFS.map(p=>p.id),
-  manager:   ['add_mahal','add_equip','del_equip','inspect','manage_types','delete_report','view_notifications','maint_warn'],
-  inspector: ['inspect','maint_warn'],
+  manager:   ['add_mahal','add_equip','del_equip','inspect','manage_types','delete_report','view_notifications','maint_warn','view_docs','manage_docs','manage_workorders'],
+  inspector: ['inspect','maint_warn','view_docs'],
   viewer:    [],
 };
 const MAHAL_ICONS = ['🏨','🏩','🏪','🏬','🏢','🏦','🏥','🏛️','🌴','🏗️','🏭','🏫','🏰','🏟️','⛪','🕌','🏬','🍽️','☕','🏊'];
@@ -2605,8 +2613,9 @@ const FREE_STORAGE_GB = 5;  // ücretsiz Storage kotası
 const DEFAULT_RETENTION = {
   reports: 365,        // raporlar 1 yıl
   documents: 730,      // belgeler 2 yıl (ileride Storage ile)
-  notifications: 90,   // bildirimler 3 ay
-  logs: 90,            // log/aktivite 3 ay
+  notifications: 30,   // bildirimler 30 gün
+  logs: 30,            // log/aktivite 30 gün
+  workorders: 30,      // tamamlanan (onaylı) iş emirleri 30 gün
 };
 
 /* Bakım kutusu aç/kapa (ekipman türleri gibi aşağı doğru açılır) — genel */
@@ -2753,6 +2762,16 @@ async function runRetentionCleanup(){
     S.logs=S.logs.filter(l=>{ const a=ageDays(l.date); return a===null||a<=ret.logs; });
     S.activity=S.activity.filter(x=>{ const a=ageDays(x.date); return a===null||a<=ret.logs; });
     if(S.logs.length!==beforeL || S.activity.length!==beforeA) changed=true;
+  }
+  // Tamamlanan (onaylı) iş emirleri — açık/onay bekleyenler ASLA silinmez
+  if(ret.workorders>0 && Array.isArray(S.workOrders)){
+    const before=S.workOrders.length;
+    S.workOrders=S.workOrders.filter(w=>{
+      if(w.status!=='approved') return true; // sadece onaylananlar temizlenir
+      const a=ageDays(w.approvedAt, w.approvedTs||w.doneTs);
+      return a===null || a<=ret.workorders;
+    });
+    if(S.workOrders.length!==before) changed=true;
   }
   // (Belgeler ileride Storage ile — ret.documents kullanılacak)
 
@@ -3045,6 +3064,10 @@ let _storageReady=false;
 let _globalDocs={ folders:[] };  // Genel evraklar (süper admin belge ağacı) — başta tanımlı olmalı
 let _globalDocOpen={};           // klasör aç/kapa durumu (yerel, kalıcı değil — varsayılan KAPALI)
 let _docTreeOpen={};             // Şirket belge ağacı açık/kapalı durumları — başta tanımlı olmalı
+let _docSearch='';               // Belgeler arama sorgusu
+let _docSelectMode=false;        // Çoklu seçim modu (belge taşı/sil)
+let _docSelected=new Set();      // Seçili belgeler "folderId::docId"
+let _gdocSearch='';              // Genel evraklar arama sorgusu
 let _listener=null;
 let _fbConnected=false;   // Firebase sunucu bağlantısı var mı
 let _authReady=false;     // Anonim kimlik alındı mı (güvenlik)
@@ -3699,7 +3722,7 @@ function renderWorkOrders(){
   const wrap=document.getElementById('workorder-wrap');
   if(!wrap) return;
   const me=S.cur;
-  const canCreate = isAdmin() || roleLevel(me?.role)>=2; // denetçi ve üzeri oluşturur
+  const canCreate = canDo('manage_workorders'); // iş emri oluşturma yetkisi
   const seesAll = me?.isSuper || roleLevel(me?.role)>=3;  // yönetici+ tümünü görür
   const visible=(S.workOrders||[]).filter(w=> seesAll || w.byId===me?.id || (w.assignees||[]).includes(me?.id));
   const active=visible.filter(w=>w.status!=='approved').sort((a,b)=>(b.ts||0)-(a.ts||0));
@@ -3730,7 +3753,7 @@ function woRowHTML(w){
 
 /* Yeni iş emri oluştur */
 function openAddWorkOrder(){
-  if(!(isAdmin()||roleLevel(S.cur?.role)>=2)){ toast('🚫 Yetkiniz yok'); return; }
+  if(!canDo('manage_workorders')){ toast('🚫 İş emri oluşturma yetkiniz yok'); return; }
   _woNew={ id:'wo'+Date.now()+Math.random().toString(36).slice(2,5), photos:[] };
   document.getElementById('wo-title').textContent='🗂️ Yeni İş Emri';
   renderWoCreateBody();
@@ -3951,18 +3974,62 @@ async function onWoPhotoSelected(ev){
 function renderCompanyDocs(){
   const wrap=document.getElementById('company-docs-wrap');
   if(!wrap) return;
-  // Otomatik ağaç: mahallere göre grupla → ekipman belgeleri
-  const tree=buildCompanyDocTree();
+  // Yetki: belgeleri görme izni yoksa panel hiç gösterilmez
+  if(!canDo('view_docs')){ wrap.innerHTML=''; return; }
+  const canManage=canDo('manage_docs');
+  const selCount=_docSelected.size;
   wrap.innerHTML=`
     <div style="background:var(--bg);border:1px solid var(--brd);border-radius:14px;overflow:hidden">
-      <div style="padding:13px 15px;border-bottom:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between">
+      <div style="padding:13px 15px;border-bottom:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between;gap:8px">
         <span style="font-size:13.5px;font-weight:700;color:var(--txt)">📁 Belgeler</span>
-        <button class="doc-mini-btn" onclick="addCompanyFolder()" title="Klasör Ekle" style="font-size:15px">➕</button>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${canManage?`<button class="doc-mini-btn" onclick="toggleDocSelectMode()" title="Çoklu seç / taşı" style="font-size:14px;${_docSelectMode?'background:var(--accent);color:#fff;border-radius:6px':''}">☑️</button>
+          <button class="doc-mini-btn" onclick="addCompanyFolder()" title="Klasör Ekle" style="font-size:15px">➕</button>`:''}
+        </div>
       </div>
-      <div style="padding:8px;max-height:60vh;overflow-y:auto">
-        ${tree.length?tree.map(node=>renderDocNode(node,0)).join(''):'<div style="padding:20px;text-align:center;color:var(--txt3);font-size:12px">Henüz belge yok.<br>Ekipmanlara belge ekleyince otomatik dosyalanır.</div>'}
+      <div style="padding:8px 10px 4px">
+        <input class="form-input" style="height:34px;font-size:12.5px" placeholder="🔍 Belge / klasör ara…" value="${safe(_docSearch)}" oninput="_docSearch=this.value;updateDocsBodyDebounced()"/>
+      </div>
+      ${(_docSelectMode&&selCount)?`<div style="display:flex;gap:6px;padding:0 10px 8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" style="flex:1" onclick="moveSelectedDocs()">➡️ Taşı (${selCount})</button>
+        <button class="btn btn-danger btn-sm" style="flex:1" onclick="deleteSelectedDocs()">🗑️ Sil (${selCount})</button>
+        <button class="btn btn-secondary btn-sm" onclick="_docSelected.clear();renderCompanyDocs()">✖</button>
+      </div>`:''}
+      <div id="company-docs-body" style="padding:4px 8px 8px;max-height:56vh;overflow-y:auto">
+        ${docsBodyHTML()}
       </div>
     </div>`;
+}
+function docsBodyHTML(){
+  const q=(_docSearch||'').trim().toLowerCase();
+  const canManage=canDo('manage_docs');
+  if(q) return renderDocSearchResults(q,canManage);
+  const tree=buildCompanyDocTree();
+  return tree.length?tree.map(node=>renderDocNode(node,0)).join(''):'<div style="padding:20px;text-align:center;color:var(--txt3);font-size:12px">Henüz belge yok.<br>Ekipmanlara belge ekleyince otomatik dosyalanır.</div>';
+}
+let _docsRenderTimer=null;
+function updateDocsBodyDebounced(){ clearTimeout(_docsRenderTimer); _docsRenderTimer=setTimeout(()=>{ const b=document.getElementById('company-docs-body'); if(b) b.innerHTML=docsBodyHTML(); },180); }
+
+/* Arama sonuçları — tüm belgeleri (otomatik+manuel) düz liste olarak süz */
+function renderDocSearchResults(q, canManage){
+  const rows=[];
+  (S.mahals||[]).forEach(m=>{
+    (S.equips||[]).filter(e=>e.mahalId===m.id).forEach(e=>{
+      (e.documents||[]).forEach(d=>{ if((d.name||'').toLowerCase().includes(q)) rows.push({d, loc:m.name+' › '+e.name, manual:false}); });
+    });
+  });
+  (S.companyFolders||[]).forEach(f=>{
+    (f.docs||[]).forEach(d=>{ if((d.name||'').toLowerCase().includes(q)) rows.push({d, loc:companyFolderPath(f), folderId:f.id, manual:true}); });
+  });
+  if(!rows.length) return '<div style="padding:18px;text-align:center;color:var(--txt3);font-size:12px">Eşleşen belge yok.</div>';
+  return rows.map(r=>`<div class="doc-tree-row" style="padding-left:9px">
+    <span style="font-size:13px">${r.d.type==='application/pdf'?'📄':'🖼️'}</span>
+    <span style="flex:1;min-width:0;cursor:pointer" onclick="window.open('${r.d.url}','_blank')">
+      <div style="font-size:12.5px;color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(r.d.name)}</div>
+      <div style="font-size:10.5px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(r.loc)}</div>
+    </span>
+    ${(r.manual&&canManage)?`<button class="doc-mini-btn" onclick="moveCompanyDoc('${r.folderId}','${r.d.id}')" title="Taşı" style="font-size:12px">➡️</button>`:''}
+  </div>`).join('');
 }
 
 /* Belge ağacını kur: otomatik (mahal>ekipman) + manuel klasörler */
@@ -3998,35 +4065,37 @@ function companyFolderPath(f){
 
 function renderDocNode(node, depth){
   const open=!!node.open;
-  const hasChildren=(node.children&&node.children.length)||(node.docs&&node.docs.length);
   const pad=depth*16;
+  const canManage=canDo('manage_docs');
   let html=`
     <div class="doc-tree-folder">
       <div class="doc-tree-row" style="padding-left:${9+pad}px" onclick="toggleDocNode('${node.id}')">
         <span class="doc-tree-chevron ${open?'open':''}">▶</span>
         <span style="font-size:15px">${open?'📂':(node.icon||'📁')}</span>
         <span style="flex:1;font-size:12.5px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(node.name)}</span>
-        ${node.manual?`<button class="doc-mini-btn" onclick="event.stopPropagation();addCompanyFolder('${node.folderId}')" title="Alt Klasör Ekle" style="font-size:13px">📁➕</button>
+        ${(node.manual&&canManage)?`<button class="doc-mini-btn" onclick="event.stopPropagation();addCompanyFolder('${node.folderId}')" title="Alt Klasör Ekle" style="font-size:13px">📁➕</button>
         <button class="doc-mini-btn" onclick="event.stopPropagation();renameCompanyFolder('${node.folderId}')" title="Yeniden Adlandır" style="font-size:13px">✏️</button>
         <button class="doc-mini-btn" onclick="event.stopPropagation();uploadToCompanyFolder('${node.folderId}')" title="Belge Yükle" style="font-size:13px">⬆️</button>
         <button class="doc-mini-btn" onclick="event.stopPropagation();deleteCompanyFolder('${node.folderId}')" title="Sil" style="font-size:13px">🗑️</button>`:''}
       </div>`;
   if(open){
-    // Alt klasörler (ekipmanlar)
+    // Alt klasörler (ekipmanlar / manuel alt klasörler)
     if(node.children){ node.children.forEach(ch=>{ html+=renderDocNode(ch, depth+1); }); }
     // Belgeler
     if(node.docs){
       node.docs.forEach(d=>{
+        const selKey=node.folderId+'::'+d.id;
+        const selectable=node.manual&&_docSelectMode&&canManage;
         html+=`<div class="doc-tree-row" style="padding-left:${9+pad+20}px">
-          <span style="font-size:13px">${d.type==='application/pdf'?'📄':'🖼️'}</span>
+          ${selectable?`<input type="checkbox" class="doc-sel" ${_docSelected.has(selKey)?'checked':''} onclick="event.stopPropagation();toggleDocSelect('${node.folderId}','${d.id}')" style="width:16px;height:16px;flex-shrink:0"/>`:`<span style="font-size:13px">${d.type==='application/pdf'?'📄':'🖼️'}</span>`}
           <span style="flex:1;font-size:12px;color:var(--txt2);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onclick="window.open('${d.url}','_blank')">${safe(d.name)}</span>
-          ${node.manual?`<button class="doc-mini-btn" onclick="moveCompanyDoc('${node.folderId}','${d.id}')" title="Başka klasöre taşı" style="font-size:12px">➡️</button>
+          ${(node.manual&&canManage&&!_docSelectMode)?`<button class="doc-mini-btn" onclick="moveCompanyDoc('${node.folderId}','${d.id}')" title="Başka klasöre taşı" style="font-size:12px">➡️</button>
           <button class="doc-mini-btn" onclick="deleteCompanyDoc('${node.folderId}','${d.id}')" title="Sil" style="font-size:12px">🗑️</button>`:''}
         </div>`;
       });
     }
-    // Manuel klasöre net "Belge Ekle" butonu
-    if(node.manual){
+    // Manuel klasöre net "Belge Ekle" butonu (yetki varsa)
+    if(node.manual&&canManage&&!_docSelectMode){
       html+=`<div style="padding:4px 0 4px ${9+pad+20}px"><button class="btn btn-secondary btn-sm" style="width:calc(100% - 10px);justify-content:center" onclick="uploadToCompanyFolder('${node.folderId}')">📎 Belge Ekle</button></div>`;
     }
   }
@@ -4035,8 +4104,52 @@ function renderDocNode(node, depth){
 }
 
 function toggleDocNode(id){ _docTreeOpen[id]=!_docTreeOpen[id]; renderCompanyDocs(); }
+function toggleDocSelectMode(){ _docSelectMode=!_docSelectMode; _docSelected.clear(); renderCompanyDocs(); }
+function toggleDocSelect(fid, docId){ const k=fid+'::'+docId; if(_docSelected.has(k)) _docSelected.delete(k); else _docSelected.add(k); renderCompanyDocs(); }
+
+/* Seçili belgeleri toplu taşı */
+async function moveSelectedDocs(){
+  if(!canDo('manage_docs')) return;
+  if(!_docSelected.size){ toast('⚠️ Belge seçin'); return; }
+  const targets=(S.companyFolders||[]).map(x=>({ id:x.id, name:companyFolderPath(x) }));
+  if(!targets.length){ toast('⚠️ Hedef klasör yok'); return; }
+  const toId=await pickFolderDialog('📁 Seçilenler hangi klasöre taşınsın?', targets);
+  if(!toId) return;
+  const to=(S.companyFolders||[]).find(x=>x.id===toId); if(!to) return;
+  if(!to.docs) to.docs=[];
+  let moved=0;
+  _docSelected.forEach(k=>{
+    const [fid,docId]=k.split('::');
+    if(fid===toId) return; // aynı klasöre taşıma
+    const from=(S.companyFolders||[]).find(x=>x.id===fid); if(!from) return;
+    const doc=(from.docs||[]).find(d=>d.id===docId); if(!doc) return;
+    from.docs=from.docs.filter(d=>d.id!==docId);
+    to.docs.unshift(doc); moved++;
+  });
+  _docSelected.clear(); _docSelectMode=false;
+  try{ await save(); renderCompanyDocs(); toast(`✅ ${moved} belge taşındı: ${to.name}`); }
+  catch(e){ toast('❌ '+e.message,5000); }
+}
+/* Seçili belgeleri toplu sil */
+async function deleteSelectedDocs(){
+  if(!canDo('manage_docs')) return;
+  if(!_docSelected.size){ toast('⚠️ Belge seçin'); return; }
+  if(!await confirmDialog({title:'Belgeleri Sil',message:`${_docSelected.size} belge silinecek.`,danger:true,okText:'Sil'})) return;
+  let del=0;
+  for(const k of Array.from(_docSelected)){
+    const [fid,docId]=k.split('::');
+    const from=(S.companyFolders||[]).find(x=>x.id===fid); if(!from) continue;
+    const doc=(from.docs||[]).find(d=>d.id===docId); if(!doc) continue;
+    try{ if(doc.path) await _storage.ref(doc.path).delete(); }catch(e){}
+    from.docs=from.docs.filter(d=>d.id!==docId); del++;
+  }
+  _docSelected.clear(); _docSelectMode=false;
+  try{ await save(); renderCompanyDocs(); toast(`🗑️ ${del} belge silindi`); }
+  catch(e){ toast('❌ '+e.message,5000); }
+}
 
 async function addCompanyFolder(parentId){
+  if(!canDo('manage_docs')){ toast('🚫 Belge yönetim yetkiniz yok'); return; }
   const name=await promptDialog({title: parentId?'Yeni Alt Klasör':'Yeni Klasör', message:'Klasör adı:', placeholder:'örn: Genel Belgeler', okText:'Oluştur'});
   if(name===null||!name.trim()) return;
   if(!S.companyFolders) S.companyFolders=[];
@@ -4103,6 +4216,7 @@ async function moveCompanyDoc(fromFid, docId){
 
 let _companyUploadFolder=null;
 function uploadToCompanyFolder(fid){
+  if(!canDo('manage_docs')){ toast('🚫 Belge yönetim yetkiniz yok'); return; }
   _companyUploadFolder=fid;
   const input=document.getElementById('company-doc-input');
   if(input){ input.value=''; input.click(); }
@@ -4162,51 +4276,91 @@ async function saveGlobalDocs(){
 function renderGlobalDocs(){
   const wrap=document.getElementById('global-docs-wrap');
   if(!wrap) return;
-  const folders=_globalDocs.folders||[];
   wrap.innerHTML=`
     <div style="background:var(--bg);border:1px solid var(--brd);border-radius:14px;overflow:hidden">
       <div style="padding:13px 16px;border-bottom:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between">
         <span style="font-size:13.5px;font-weight:700;color:var(--txt)">📁 Genel Evraklar</span>
         <button class="doc-mini-btn" onclick="addGlobalFolder()" title="Klasör Ekle" style="font-size:16px">➕</button>
       </div>
-      <div style="padding:8px">
-        ${folders.length?folders.map(f=>renderGlobalFolder(f)).join(''):'<div style="padding:18px;text-align:center;color:var(--txt3);font-size:12.5px">Henüz klasör yok. ➕ ile ekleyin.</div>'}
+      <div style="padding:8px 10px 4px">
+        <input class="form-input" style="height:34px;font-size:12.5px" placeholder="🔍 Belge / klasör ara…" value="${safe(_gdocSearch)}" oninput="_gdocSearch=this.value;updateGdocsBodyDebounced()"/>
+      </div>
+      <div id="global-docs-body" style="padding:4px 8px 8px">
+        ${gdocsBodyHTML()}
       </div>
     </div>`;
 }
+function gdocsBodyHTML(){
+  const q=(_gdocSearch||'').trim().toLowerCase();
+  if(q) return renderGlobalSearchResults(q);
+  const roots=(_globalDocs.folders||[]).filter(f=>!f.parentId);
+  return roots.length?roots.map(f=>renderGlobalFolder(f,0)).join(''):'<div style="padding:18px;text-align:center;color:var(--txt3);font-size:12.5px">Henüz klasör yok. ➕ ile ekleyin.</div>';
+}
+let _gdocsRenderTimer=null;
+function updateGdocsBodyDebounced(){ clearTimeout(_gdocsRenderTimer); _gdocsRenderTimer=setTimeout(()=>{ const b=document.getElementById('global-docs-body'); if(b) b.innerHTML=gdocsBodyHTML(); },180); }
 
-function renderGlobalFolder(f){
+/* Genel evrak klasörünün tam yolu */
+function globalFolderPath(f){
+  let parts=[f.name], p=f.parentId, guard=0;
+  while(p && guard++<12){ const pf=(_globalDocs.folders||[]).find(x=>x.id===p); if(!pf) break; parts.unshift(pf.name); p=pf.parentId; }
+  return parts.join(' › ');
+}
+/* Genel evrak arama sonuçları (düz liste) */
+function renderGlobalSearchResults(q){
+  const rows=[];
+  (_globalDocs.folders||[]).forEach(f=>{
+    (f.docs||[]).forEach(d=>{ if((d.name||'').toLowerCase().includes(q)) rows.push({d, f}); });
+  });
+  if(!rows.length) return '<div style="padding:18px;text-align:center;color:var(--txt3);font-size:12px">Eşleşen belge yok.</div>';
+  return rows.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px">
+    <span style="font-size:14px">${r.d.type==='application/pdf'?'📄':'🖼️'}</span>
+    <span style="flex:1;min-width:0;cursor:pointer" onclick="window.open('${r.d.url}','_blank')">
+      <div style="font-size:12.5px;color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(r.d.name)}</div>
+      <div style="font-size:10.5px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(globalFolderPath(r.f))}</div>
+    </span>
+    <button class="doc-mini-btn" onclick="sendGlobalDocToCompany('${r.f.id}','${r.d.id}')" title="Şirkete Gönder" style="font-size:13px">📤</button>
+  </div>`).join('');
+}
+
+function renderGlobalFolder(f, depth){
+  depth=depth||0;
   const open=!!_globalDocOpen[f.id];
   const docs=f.docs||[];
+  const kids=(_globalDocs.folders||[]).filter(x=>x.parentId===f.id);
+  const pad=30+depth*16;
   return `
     <div style="margin-bottom:4px">
-      <div style="display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:8px;cursor:pointer;background:${open?'var(--bg2)':'transparent'}" onclick="toggleGlobalFolder('${f.id}')">
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 10px 9px ${10+depth*16}px;border-radius:8px;cursor:pointer;background:${open?'var(--bg2)':'transparent'}" onclick="toggleGlobalFolder('${f.id}')">
         <span style="font-size:13px;color:var(--txt3);display:inline-block;transform:rotate(${open?'90':'0'}deg);transition:transform .15s">▶</span>
         <span style="font-size:16px">${open?'📂':'📁'}</span>
-        <span style="flex:1;font-size:13px;font-weight:600;color:var(--txt)">${safe(f.name)}</span>
+        <span style="flex:1;font-size:13px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(f.name)}</span>
         <span style="font-size:11px;color:var(--txt3)">${docs.length}</span>
+        <button class="doc-mini-btn" onclick="event.stopPropagation();addGlobalFolder('${f.id}')" title="Alt Klasör Ekle">📁➕</button>
         <button class="doc-mini-btn" onclick="event.stopPropagation();renameGlobalFolder('${f.id}')" title="Yeniden Adlandır">✏️</button>
         <button class="doc-mini-btn" onclick="event.stopPropagation();uploadToGlobalFolder('${f.id}')" title="Belge Yükle">⬆️</button>
         <button class="doc-mini-btn" onclick="event.stopPropagation();deleteGlobalFolder('${f.id}')" title="Sil">🗑️</button>
       </div>
-      ${open?`<div style="padding:2px 0 6px 30px">
+      ${open?`${kids.map(k=>renderGlobalFolder(k, depth+1)).join('')}<div style="padding:2px 0 6px ${pad}px">
         ${docs.length?docs.map(d=>`
           <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px">
             <span style="font-size:14px">${d.type==='application/pdf'?'📄':'🖼️'}</span>
             <span style="flex:1;font-size:12.5px;color:var(--txt2);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onclick="window.open('${d.url}','_blank')">${safe(d.name)}</span>
             <button class="doc-mini-btn" onclick="sendGlobalDocToCompany('${f.id}','${d.id}')" title="Şirkete Gönder" style="font-size:13px">📤</button>
             <button class="doc-mini-btn" onclick="deleteGlobalDoc('${f.id}','${d.id}')" title="Sil" style="font-size:13px">🗑️</button>
-          </div>`).join(''):'<div style="padding:8px 10px;font-size:12px;color:var(--txt3)">Boş klasör</div>'}
+          </div>`).join(''):(kids.length?'':'<div style="padding:8px 10px;font-size:12px;color:var(--txt3)">Boş klasör</div>')}
         <button class="btn btn-secondary btn-sm" style="margin-top:6px;width:100%;justify-content:center" onclick="uploadToGlobalFolder('${f.id}')">📎 Belge Ekle</button>
       </div>`:''}
     </div>`;
 }
 
-async function addGlobalFolder(){
-  const name=await promptDialog({title:'Yeni Klasör',message:'Klasör adı:',placeholder:'örn: Sözleşmeler',okText:'Oluştur'});
+async function addGlobalFolder(parentId){
+  const name=await promptDialog({title: parentId?'Yeni Alt Klasör':'Yeni Klasör', message:'Klasör adı:', placeholder:'örn: Sözleşmeler', okText:'Oluştur'});
   if(name===null||!name.trim()) return;
   if(!_globalDocs.folders) _globalDocs.folders=[];
-  _globalDocs.folders.push({ id:'gf'+Date.now(), name:name.trim(), open:true, docs:[] });
+  const nf={ id:'gf'+Date.now(), name:name.trim(), docs:[] };
+  if(parentId) nf.parentId=parentId;
+  _globalDocs.folders.push(nf);
+  if(parentId) _globalDocOpen[parentId]=true;
   try{ await saveGlobalDocs(); renderGlobalDocs(); toast('✅ Klasör oluşturuldu'); }
   catch(e){ toast('❌ '+e.message,5000); }
 }
@@ -4228,17 +4382,20 @@ function pickCompaniesMultiDialog(title){
     document.getElementById('gmodal-title').textContent=title||'Şirket Seç';
     const list=S.companies.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','tr'));
     body.innerHTML=`
+      <input class="form-input" style="height:36px;font-size:13px;margin-bottom:8px" placeholder="🔍 Şirket ara…" oninput="window._filterPickComp&&window._filterPickComp(this.value)"/>
       <label class="perm-item" style="cursor:pointer;background:var(--bg2);border-color:var(--accent)">
-        <input type="checkbox" id="pick-all-comp" onchange="document.querySelectorAll('.pick-comp').forEach(c=>c.checked=this.checked)"/>
+        <input type="checkbox" id="pick-all-comp" onchange="document.querySelectorAll('.pick-comp-row:not([style*=none]) .pick-comp').forEach(c=>c.checked=this.checked)"/>
         <div><div class="perm-label">✔️ Tümünü Seç</div><div class="perm-desc">${list.length} şirket</div></div>
       </label>
       <div style="display:flex;flex-direction:column;gap:4px;max-height:45vh;overflow-y:auto;margin-top:8px">
-        ${list.map(c=>`<label class="perm-item" style="cursor:pointer">
+        ${list.map(c=>`<label class="perm-item pick-comp-row" data-name="${safe((c.name||'').toLowerCase())}" style="cursor:pointer">
           <input type="checkbox" class="pick-comp" value="${c.id}"/>
           <div><div class="perm-label">🏢 ${safe(c.name)}</div></div>
         </label>`).join('')}
       </div>
       <button class="btn btn-primary btn-full" style="margin-top:14px" onclick="window._pickCompaniesDone&&window._pickCompaniesDone()">📤 Seçilenlere Gönder</button>`;
+    window._filterPickComp=(v)=>{ const s=(v||'').trim().toLowerCase();
+      document.querySelectorAll('.pick-comp-row').forEach(r=>{ r.style.display=(!s||(r.getAttribute('data-name')||'').includes(s))?'':'none'; }); };
     window._pickCompaniesDone=()=>{
       const ids=[...document.querySelectorAll('.pick-comp:checked')].map(c=>c.value);
       if(!ids.length){ toast('⚠️ En az bir şirket seçin'); return; }
@@ -4287,9 +4444,15 @@ function toggleGlobalFolder(fid){
 async function deleteGlobalFolder(fid){
   const f=(_globalDocs.folders||[]).find(x=>x.id===fid);
   if(!f) return;
-  if(!await confirmDialog({title:'Klasörü Sil',message:`"${safe(f.name)}" klasörü ve içindeki ${(f.docs||[]).length} belge silinecek.`,danger:true,okText:'Sil'})) return;
-  for(const d of (f.docs||[])){ try{ if(d.path) await _storage.ref(d.path).delete(); }catch(e){} }
-  _globalDocs.folders=_globalDocs.folders.filter(x=>x.id!==fid);
+  // Alt klasörleri özyinelemeli topla
+  const toDelete=[]; const collect=(id)=>{ toDelete.push(id); (_globalDocs.folders||[]).filter(x=>x.parentId===id).forEach(c=>collect(c.id)); };
+  collect(fid);
+  const bucket=(_globalDocs.folders||[]).filter(x=>toDelete.includes(x.id));
+  const docCount=bucket.reduce((n,x)=>n+(x.docs||[]).length,0);
+  const subCount=toDelete.length-1;
+  if(!await confirmDialog({title:'Klasörü Sil',message:`"${safe(f.name)}"${subCount?` ve ${subCount} alt klasör`:''} + içindeki ${docCount} belge silinecek.`,danger:true,okText:'Sil'})) return;
+  for(const x of bucket){ for(const d of (x.docs||[])){ try{ if(d.path) await _storage.ref(d.path).delete(); }catch(e){} } }
+  _globalDocs.folders=_globalDocs.folders.filter(x=>!toDelete.includes(x.id));
   try{ await saveGlobalDocs(); renderGlobalDocs(); toast('🗑️ Klasör silindi'); }
   catch(e){ toast('❌ '+e.message,5000); }
 }
@@ -6065,6 +6228,7 @@ function openRetentionPanel(){
   document.getElementById('ret-documents').value=r.documents;
   document.getElementById('ret-notifications').value=r.notifications;
   document.getElementById('ret-logs').value=r.logs;
+  const woEl=document.getElementById('ret-workorders'); if(woEl) woEl.value=r.workorders;
   openModal('modal-retention');
 }
 async function saveRetention(){
@@ -6075,6 +6239,7 @@ async function saveRetention(){
     documents: num('ret-documents', DEFAULT_RETENTION.documents),
     notifications: num('ret-notifications', DEFAULT_RETENTION.notifications),
     logs: num('ret-logs', DEFAULT_RETENTION.logs),
+    workorders: num('ret-workorders', DEFAULT_RETENTION.workorders),
   };
   logActivity('retention', 'Veri saklama süreleri güncellendi');
   try{
@@ -9642,7 +9807,7 @@ function renderProfile(){
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
         <div style="min-width:0">
           <div style="font-size:13.5px;font-weight:600;color:var(--txt)">Otomatik temizlik</div>
-          <div style="font-size:11.5px;color:var(--txt3);margin-top:2px">Rapor ${getRetention().reports}g · Bildirim ${getRetention().notifications}g · Log ${getRetention().logs}g</div>
+          <div style="font-size:11.5px;color:var(--txt3);margin-top:2px">Rapor ${getRetention().reports}g · Bildirim ${getRetention().notifications}g · Log ${getRetention().logs}g · İş Emri ${getRetention().workorders}g</div>
         </div>
         <span style="font-size:11px;color:var(--accent);font-weight:600;white-space:nowrap">⚙️ Ayarla</span>
       </div>
