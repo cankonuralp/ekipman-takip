@@ -1316,9 +1316,10 @@ async function loadCompanyStats(){
       if(snap.exists()){
         const d=snap.val();
         const bytes=new Blob([JSON.stringify(d)]).size;
-        // Belge boyutları (storage)
+        // Belge boyutları (storage): ekipman belgeleri + şirket klasörü belgeleri (f.docs)
         let storageBytes=0;
         (toArr(d.equips||[])).forEach(e=>{ (e.documents||[]).forEach(doc=>{ storageBytes+=(doc.size||0); }); });
+        (toArr(d.companyFolders||[])).forEach(f=>{ (f.docs||[]).forEach(doc=>{ storageBytes+=(doc.size||0); }); });
         _companyStats[c.id]={
           bytes, storageBytes,
           equips:(toArr(d.equips||[])).length,
@@ -1357,6 +1358,8 @@ function renderCompaniesScreen(skipReload){
   // Toplam veri sayacı — şirket içindeki "Veri & Depolama Takibi" kutusunun BİREBİR aynısı
   let totalBytes=0, totalStorageBytes=0, totalEquips=0, totalReports=0;
   S.companies.forEach(c=>{ const s=_companyStats[c.id]; if(s){ totalBytes+=s.bytes||0; totalStorageBytes+=s.storageBytes||0; totalEquips+=s.equips||0; totalReports+=s.reports||0; } });
+  // Genel evraklar (global) da Storage kotasına dahil
+  (_globalDocs.folders||[]).forEach(f=>{ (f.docs||[]).forEach(d=>{ totalStorageBytes+=(d.size||0); }); });
   const totalEl=document.getElementById('companies-total');
   if(totalEl){
     if(!S.companies.length){ totalEl.innerHTML=''; }
@@ -3889,23 +3892,52 @@ function renderMahalPage(){
     if(!gmap[key]){ gmap[key]={name:e.cluster||null, items:[]}; groups.push(gmap[key]); }
     gmap[key].items.push(e);
   });
+  const hasClusters=groups.some(g=>g.name);
   let html='';
   groups.forEach(g=>{
-    if(g.name){
-      html+=`<div class="cluster-hdr">
-        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">🗂️ ${safe(g.name)} <span style="opacity:.6;font-weight:500">(${g.items.length})</span></span>
-        ${canManage?`<button class="cat-mng-btn" onclick="renameCluster('${jsStr(g.name)}')" title="Küme adını değiştir">✏️</button>
-        <button class="cat-mng-btn" onclick="dissolveCluster('${jsStr(g.name)}')" title="Kümeyi dağıt (ekipmanlar kalır)">🗑️</button>`:''}
-      </div>`;
-    } else if(groups.length>1){
-      html+=`<div class="cluster-hdr" style="opacity:.55">Kümesiz</div>`;
+    if(!hasClusters){
+      // Hiç küme yok → düz liste (başlıksız)
+      html+=`<div class="equip-list" data-cluster="">${g.items.map((e,i)=>mahalEquipRowHTML(e,i,g.items.length,canReorder)).join('')}</div>`;
+      return;
     }
-    html+=`<div class="equip-list" data-cluster="${safe(g.name||'')}">`;
-    g.items.forEach((e,i)=>{ html+=mahalEquipRowHTML(e, i, g.items.length, canReorder); });
-    html+=`</div>`;
+    // Küme(ler) var → Ekipmanlar sekmesindeki gibi AÇILIR-KAPANIR bölüm (cat-section)
+    const key=g.name||'__none__';
+    const isOpen=!_clusterClosed.has(key);
+    html+=`<div class="cat-section">
+      <div class="cat-section-title" data-cluster="${safe(key)}" style="cursor:pointer">
+        <span class="cat-sec-icon">${g.name?'🗂️':'📋'}</span>
+        <span class="cat-sec-name">${safe(g.name||'Kümesiz')}</span>
+        ${(g.name&&canManage)?`<span class="cat-mng">
+          <button class="cat-mng-btn" data-act="rename" title="Küme adını değiştir">✏️</button>
+          <button class="cat-mng-btn" data-act="dissolve" title="Kümeyi dağıt (ekipmanlar kalır)">🗑️</button>
+        </span>`:''}
+        <span class="cat-section-count">${g.items.length}</span>
+        <span class="cat-arrow">${isOpen?'▲':'▼'}</span>
+      </div>
+      <div class="cat-equip-body" style="display:${isOpen?'block':'none'}">
+        <div class="equip-list" data-cluster="${safe(g.name||'')}">
+          ${g.items.map((e,i)=>mahalEquipRowHTML(e,i,g.items.length,canReorder)).join('')}
+        </div>
+      </div>
+    </div>`;
   });
   listEl.innerHTML=filterRow+html;
   listEl.querySelectorAll('.sfilter-btn').forEach(b=>b.addEventListener('click',()=>{ S.mahalFilter=b.dataset.mf; renderMahalPage(); }));
+  // Küme başlığı: tıkla → aç/kapa; ✏️/🗑️ → yönet
+  listEl.querySelectorAll('.cat-section-title').forEach(t=>{
+    t.addEventListener('click',ev=>{
+      const mng=ev.target.closest('.cat-mng-btn');
+      const key=t.getAttribute('data-cluster');
+      if(mng){
+        ev.stopPropagation();
+        const cname=(key==='__none__')?null:key;
+        if(cname){ mng.dataset.act==='rename'?renameCluster(cname):dissolveCluster(cname); }
+        return;
+      }
+      _clusterClosed.has(key)?_clusterClosed.delete(key):_clusterClosed.add(key);
+      renderMahalPage();
+    });
+  });
   listEl.querySelectorAll('.equip-row').forEach(row=>row.addEventListener('click',ev=>{
     if(ev.target.closest('.eq-reorder')||ev.target.closest('.eq-drag')) return;
     openEquipDetail(row.dataset.eid);
@@ -4023,6 +4055,7 @@ async function dissolveCluster(name){
    EKİPMAN LİSTESİ
 ══════════════════════════════════════ */
 const openCats=new Set();
+const _clusterClosed=new Set(); // kapalı kümeler (varsayılan açık)
 const _catPage={}; // her kategori için ekipman sayfa no
 
 function renderEquipments(){
