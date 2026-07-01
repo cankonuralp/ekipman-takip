@@ -3919,32 +3919,61 @@ async function renameGlobalFolder(fid){
   catch(e){ toast('❌ '+e.message,5000); }
 }
 
-/* Genel evrağı seçilen şirkete GÖNDER → o şirkette "Gelenler" klasörüne düşer.
+/* Çoklu şirket seçici (checkbox + Tümünü Seç, tema uyumlu) → seçilen cid dizisini döndürür */
+function pickCompaniesMultiDialog(title){
+  return new Promise(resolve=>{
+    const body=document.getElementById('gmodal-body');
+    document.getElementById('gmodal-title').textContent=title||'Şirket Seç';
+    const list=S.companies.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','tr'));
+    body.innerHTML=`
+      <label class="perm-item" style="cursor:pointer;background:var(--bg2);border-color:var(--accent)">
+        <input type="checkbox" id="pick-all-comp" onchange="document.querySelectorAll('.pick-comp').forEach(c=>c.checked=this.checked)"/>
+        <div><div class="perm-label">✔️ Tümünü Seç</div><div class="perm-desc">${list.length} şirket</div></div>
+      </label>
+      <div style="display:flex;flex-direction:column;gap:4px;max-height:45vh;overflow-y:auto;margin-top:8px">
+        ${list.map(c=>`<label class="perm-item" style="cursor:pointer">
+          <input type="checkbox" class="pick-comp" value="${c.id}"/>
+          <div><div class="perm-label">🏢 ${safe(c.name)}</div></div>
+        </label>`).join('')}
+      </div>
+      <button class="btn btn-primary btn-full" style="margin-top:14px" onclick="window._pickCompaniesDone&&window._pickCompaniesDone()">📤 Seçilenlere Gönder</button>`;
+    window._pickCompaniesDone=()=>{
+      const ids=[...document.querySelectorAll('.pick-comp:checked')].map(c=>c.value);
+      if(!ids.length){ toast('⚠️ En az bir şirket seçin'); return; }
+      closeModal('gmodal'); delete window._pickCompaniesDone; resolve(ids);
+    };
+    openModal('gmodal');
+  });
+}
+
+/* Genel evrağı seçilen ŞİRKET(LER)E gönder → her birinde "Gelenler" klasörüne düşer.
    Dosya Storage'da kalır; şirkete sadece referans (url/path) eklenir. */
 async function sendGlobalDocToCompany(fid, docId){
   const f=(_globalDocs.folders||[]).find(x=>x.id===fid); if(!f) return;
   const doc=(f.docs||[]).find(d=>d.id===docId); if(!doc) return;
   if(!S.companies.length){ toast('⚠️ Şirket yok'); return; }
-  const cid=await pickCompanyDialog('📤 Hangi şirkete gönderilsin?');
-  if(!cid) return;
+  const cids=await pickCompaniesMultiDialog('📤 Hangi şirket(ler)e gönderilsin?');
+  if(!cids||!cids.length) return;
   showLoading(true);
+  let sent=0;
   try{
-    // Hedef şirketin companyFolders dalını çek (aktif olmayan şirkete de yazabilmek için)
-    const ref=_db.ref(companyDataPath(cid)+'/companyFolders');
-    const snap=await ref.get();
-    let folders=snap.exists()?snap.val():[];
-    if(folders && !Array.isArray(folders)) folders=Object.values(folders);
-    if(!Array.isArray(folders)) folders=[];
-    let inbox=folders.find(x=>x && x.name==='Gelenler');
-    if(!inbox){ inbox={id:'cf'+Date.now(), name:'Gelenler', docs:[]}; folders.push(inbox); }
-    if(!Array.isArray(inbox.docs)) inbox.docs=[];
-    inbox.docs.unshift({ id:'cd'+Date.now()+Math.random().toString(36).slice(2,5),
-      name:doc.name, type:doc.type, path:doc.path, url:doc.url, size:doc.size||0, ts:Date.now(), fromGlobal:true });
-    await ref.set(folders);
+    for(const cid of cids){
+      const ref=_db.ref(companyDataPath(cid)+'/companyFolders');
+      const snap=await ref.get();
+      let folders=snap.exists()?snap.val():[];
+      if(folders && !Array.isArray(folders)) folders=Object.values(folders);
+      if(!Array.isArray(folders)) folders=[];
+      let inbox=folders.find(x=>x && x.name==='Gelenler');
+      if(!inbox){ inbox={id:'cf'+Date.now()+Math.random().toString(36).slice(2,4), name:'Gelenler', docs:[]}; folders.push(inbox); }
+      if(!Array.isArray(inbox.docs)) inbox.docs=[];
+      inbox.docs.unshift({ id:'cd'+Date.now()+Math.random().toString(36).slice(2,5),
+        name:doc.name, type:doc.type, path:doc.path, url:doc.url, size:doc.size||0, ts:Date.now(), fromGlobal:true });
+      await ref.set(folders);
+      sent++;
+    }
     showLoading(false);
-    const c=S.companies.find(x=>x.id===cid);
-    toast(`✅ "${doc.name}" → ${c?.name||'şirket'} · Gelenler`);
-    logSuperActivity('doc_push', `Genel evrak "${doc.name}" → ${c?.name||cid} (Gelenler klasörü)`);
+    toast(`✅ "${doc.name}" → ${sent} şirkete gönderildi (Gelenler)`);
+    logSuperActivity('doc_push', `Genel evrak "${doc.name}" → ${sent} şirkete gönderildi`);
   }catch(e){ showLoading(false); toast('❌ Gönderilemedi: '+(e.message||''),5000); }
 }
 
@@ -5887,7 +5916,7 @@ function _renderHomeRest(now){
 ══════════════════════════════════════ */
 function renderMahalPage(){
   const m=mahalById(S.activeMahalId); if(!m) return;
-  const eq=S.equips.filter(e=>e.mahalId===m.id);
+  let eq=S.equips.filter(e=>e.mahalId===m.id);
   const idx=S.mahals.findIndex(x=>x.id===m.id);
   document.getElementById('mahal-detail-hdr').innerHTML=`
     <div class="mdh-icon">${mahalIcon(idx,m)}</div>
