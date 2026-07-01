@@ -3701,7 +3701,8 @@ function renderDocNode(node, depth){
         <span class="doc-tree-chevron ${open?'open':''}">▶</span>
         <span style="font-size:15px">${open?'📂':(node.icon||'📁')}</span>
         <span style="flex:1;font-size:12.5px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(node.name)}</span>
-        ${node.manual?`<button class="doc-mini-btn" onclick="event.stopPropagation();uploadToCompanyFolder('${node.folderId}')" title="Belge Yükle" style="font-size:13px">⬆️</button>
+        ${node.manual?`<button class="doc-mini-btn" onclick="event.stopPropagation();renameCompanyFolder('${node.folderId}')" title="Yeniden Adlandır" style="font-size:13px">✏️</button>
+        <button class="doc-mini-btn" onclick="event.stopPropagation();uploadToCompanyFolder('${node.folderId}')" title="Belge Yükle" style="font-size:13px">⬆️</button>
         <button class="doc-mini-btn" onclick="event.stopPropagation();deleteCompanyFolder('${node.folderId}')" title="Sil" style="font-size:13px">🗑️</button>`:''}
       </div>`;
   if(open){
@@ -3713,7 +3714,8 @@ function renderDocNode(node, depth){
         html+=`<div class="doc-tree-row" style="padding-left:${9+pad+20}px">
           <span style="font-size:13px">${d.type==='application/pdf'?'📄':'🖼️'}</span>
           <span style="flex:1;font-size:12px;color:var(--txt2);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onclick="window.open('${d.url}','_blank')">${safe(d.name)}</span>
-          ${node.manual?`<button class="doc-mini-btn" onclick="deleteCompanyDoc('${node.folderId}','${d.id}')" title="Sil" style="font-size:12px">🗑️</button>`:''}
+          ${node.manual?`<button class="doc-mini-btn" onclick="moveCompanyDoc('${node.folderId}','${d.id}')" title="Başka klasöre taşı" style="font-size:12px">➡️</button>
+          <button class="doc-mini-btn" onclick="deleteCompanyDoc('${node.folderId}','${d.id}')" title="Sil" style="font-size:12px">🗑️</button>`:''}
         </div>`;
       });
     }
@@ -3743,6 +3745,45 @@ async function deleteCompanyFolder(fid){
   for(const d of (f.docs||[])){ try{ if(d.path) await _storage.ref(d.path).delete(); }catch(e){} }
   S.companyFolders=S.companyFolders.filter(x=>x.id!==fid);
   try{ await save(); renderCompanyDocs(); toast('🗑️ Silindi'); }catch(e){ toast('❌ '+e.message); }
+}
+
+/* Klasör adını değiştir (şirket manuel klasörü) */
+async function renameCompanyFolder(fid){
+  const f=(S.companyFolders||[]).find(x=>x.id===fid); if(!f) return;
+  const name=await promptDialog({title:'Klasör Adını Değiştir',message:'Yeni klasör adı:',value:f.name,okText:'Kaydet'});
+  if(name===null||!name.trim()) return;
+  f.name=name.trim();
+  try{ await save(); renderCompanyDocs(); toast('✅ Klasör adı güncellendi'); }
+  catch(e){ toast('❌ '+e.message,5000); }
+}
+
+/* Basit klasör seçici → seçilen klasör id'sini döndürür (gmodal) */
+function pickFolderDialog(title, folders){
+  return new Promise(resolve=>{
+    const body=document.getElementById('gmodal-body');
+    document.getElementById('gmodal-title').textContent=title||'Klasör Seç';
+    body.innerHTML=`<div style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto">
+      ${folders.map(f=>`<button class="btn btn-secondary btn-full" style="justify-content:flex-start" onclick="window._pickFolder('${f.id}')">📁 ${safe(f.name)}</button>`).join('')}
+    </div>`;
+    window._pickFolder=(id)=>{ closeModal('gmodal'); delete window._pickFolder; resolve(id); };
+    openModal('gmodal');
+  });
+}
+
+/* Belgeyi başka klasöre taşı (şirket manuel klasörleri arası) */
+async function moveCompanyDoc(fromFid, docId){
+  const from=(S.companyFolders||[]).find(x=>x.id===fromFid); if(!from) return;
+  const doc=(from.docs||[]).find(d=>d.id===docId); if(!doc) return;
+  const targets=(S.companyFolders||[]).filter(x=>x.id!==fromFid);
+  if(!targets.length){ toast('⚠️ Taşınacak başka klasör yok — önce klasör ekleyin'); return; }
+  const toId=await pickFolderDialog('📁 Hangi klasöre taşınsın?', targets);
+  if(!toId) return;
+  const to=S.companyFolders.find(x=>x.id===toId); if(!to) return;
+  from.docs=(from.docs||[]).filter(d=>d.id!==docId);
+  if(!to.docs) to.docs=[];
+  to.docs.unshift(doc);
+  try{ await save(); renderCompanyDocs(); toast('✅ Belge taşındı: '+to.name); }
+  catch(e){ toast('❌ '+e.message,5000); }
 }
 
 let _companyUploadFolder=null;
@@ -3829,6 +3870,7 @@ function renderGlobalFolder(f){
         <span style="font-size:16px">${open?'📂':'📁'}</span>
         <span style="flex:1;font-size:13px;font-weight:600;color:var(--txt)">${safe(f.name)}</span>
         <span style="font-size:11px;color:var(--txt3)">${docs.length}</span>
+        <button class="doc-mini-btn" onclick="event.stopPropagation();renameGlobalFolder('${f.id}')" title="Yeniden Adlandır">✏️</button>
         <button class="doc-mini-btn" onclick="event.stopPropagation();uploadToGlobalFolder('${f.id}')" title="Belge Yükle">⬆️</button>
         <button class="doc-mini-btn" onclick="event.stopPropagation();deleteGlobalFolder('${f.id}')" title="Sil">🗑️</button>
       </div>
@@ -3837,6 +3879,7 @@ function renderGlobalFolder(f){
           <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px">
             <span style="font-size:14px">${d.type==='application/pdf'?'📄':'🖼️'}</span>
             <span style="flex:1;font-size:12.5px;color:var(--txt2);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onclick="window.open('${d.url}','_blank')">${safe(d.name)}</span>
+            <button class="doc-mini-btn" onclick="sendGlobalDocToCompany('${f.id}','${d.id}')" title="Şirkete Gönder" style="font-size:13px">📤</button>
             <button class="doc-mini-btn" onclick="deleteGlobalDoc('${f.id}','${d.id}')" title="Sil" style="font-size:13px">🗑️</button>
           </div>`).join(''):'<div style="padding:8px 10px;font-size:12px;color:var(--txt3)">Boş klasör</div>'}
         <button class="btn btn-secondary btn-sm" style="margin-top:6px;width:100%;justify-content:center" onclick="uploadToGlobalFolder('${f.id}')">📎 Belge Ekle</button>
@@ -3851,6 +3894,45 @@ async function addGlobalFolder(){
   _globalDocs.folders.push({ id:'gf'+Date.now(), name:name.trim(), open:true, docs:[] });
   try{ await saveGlobalDocs(); renderGlobalDocs(); toast('✅ Klasör oluşturuldu'); }
   catch(e){ toast('❌ '+e.message,5000); }
+}
+
+/* Genel evrak klasörünün adını değiştir */
+async function renameGlobalFolder(fid){
+  const f=(_globalDocs.folders||[]).find(x=>x.id===fid); if(!f) return;
+  const name=await promptDialog({title:'Klasör Adını Değiştir',message:'Yeni klasör adı:',value:f.name,okText:'Kaydet'});
+  if(name===null||!name.trim()) return;
+  f.name=name.trim();
+  try{ await saveGlobalDocs(); renderGlobalDocs(); toast('✅ Klasör adı güncellendi'); }
+  catch(e){ toast('❌ '+e.message,5000); }
+}
+
+/* Genel evrağı seçilen şirkete GÖNDER → o şirkette "Gelenler" klasörüne düşer.
+   Dosya Storage'da kalır; şirkete sadece referans (url/path) eklenir. */
+async function sendGlobalDocToCompany(fid, docId){
+  const f=(_globalDocs.folders||[]).find(x=>x.id===fid); if(!f) return;
+  const doc=(f.docs||[]).find(d=>d.id===docId); if(!doc) return;
+  if(!S.companies.length){ toast('⚠️ Şirket yok'); return; }
+  const cid=await pickCompanyDialog('📤 Hangi şirkete gönderilsin?');
+  if(!cid) return;
+  showLoading(true);
+  try{
+    // Hedef şirketin companyFolders dalını çek (aktif olmayan şirkete de yazabilmek için)
+    const ref=_db.ref(companyDataPath(cid)+'/companyFolders');
+    const snap=await ref.get();
+    let folders=snap.exists()?snap.val():[];
+    if(folders && !Array.isArray(folders)) folders=Object.values(folders);
+    if(!Array.isArray(folders)) folders=[];
+    let inbox=folders.find(x=>x && x.name==='Gelenler');
+    if(!inbox){ inbox={id:'cf'+Date.now(), name:'Gelenler', docs:[]}; folders.push(inbox); }
+    if(!Array.isArray(inbox.docs)) inbox.docs=[];
+    inbox.docs.unshift({ id:'cd'+Date.now()+Math.random().toString(36).slice(2,5),
+      name:doc.name, type:doc.type, path:doc.path, url:doc.url, size:doc.size||0, ts:Date.now(), fromGlobal:true });
+    await ref.set(folders);
+    showLoading(false);
+    const c=S.companies.find(x=>x.id===cid);
+    toast(`✅ "${doc.name}" → ${c?.name||'şirket'} · Gelenler`);
+    logSuperActivity('doc_push', `Genel evrak "${doc.name}" → ${c?.name||cid} (Gelenler klasörü)`);
+  }catch(e){ showLoading(false); toast('❌ Gönderilemedi: '+(e.message||''),5000); }
 }
 
 function toggleGlobalFolder(fid){
