@@ -1630,7 +1630,7 @@ function woRowHTML(w){
       <div style="font-size:13px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${doneStyle?'text-decoration:line-through':''}">${safe(w.title)}</div>
       <div style="font-size:11px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${names?('👤 '+safe(names)):'atanmadı'} · ${w.createdAt||''}</div>
     </div>
-    ${woStatusBadge(w.status)}
+    ${(w.status==='open'&&w.revisionNote)?`<span style="font-size:10.5px;font-weight:700;color:var(--rtxt);background:var(--rbg);padding:3px 8px;border-radius:20px;white-space:nowrap">🔄 Revize</span>`:woStatusBadge(w.status)}
   </div>`;
 }
 
@@ -1652,7 +1652,10 @@ function renderWoCreateBody(){
     <div class="form-group">
       <label class="form-label">📷 Fotoğraf <span style="font-weight:400;text-transform:none;color:var(--txt3)">(isteğe bağlı)</span></label>
       <div id="wo-photos" style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0">${(_woNew.photos||[]).map((u,i)=>woPhotoThumb(u,i,'new')).join('')}</div>
-      <button class="btn btn-secondary btn-sm" onclick="woPickPhoto('new')">📷 Fotoğraf Ekle</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" style="flex:1" onclick="woPickPhoto('new','camera')">📷 Kameradan Çek</button>
+        <button class="btn btn-secondary btn-sm" style="flex:1" onclick="woPickPhoto('new','device')">🖼️ Cihazdan Yükle</button>
+      </div>
     </div>
     <div class="form-group">
       <label class="form-label">👥 Kimler görsün / görevli</label>
@@ -1703,6 +1706,7 @@ function openWorkOrderDetail(id){
     <div style="font-size:14px;color:var(--txt);white-space:pre-wrap;background:var(--bg);border-radius:10px;padding:12px;margin-bottom:10px">${safe(w.title)}</div>
     ${(w.photos||[]).length?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">${w.photos.map(u=>`<img src="${u}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;cursor:pointer" onclick="window.open('${u}','_blank')"/>`).join('')}</div>`:''}
     <div style="font-size:12.5px;color:var(--txt2);margin-bottom:6px">👤 Görevli: <b>${safe(names)}</b></div>
+    ${(w.revisionNote&&w.status==='open')?`<div style="font-size:13px;color:var(--rtxt);background:var(--rbg);border-radius:10px;padding:10px 12px;margin-bottom:10px;white-space:pre-wrap"><b>🔄 Revize istendi:</b>\n${safe(w.revisionNote)}<div style="font-size:11px;color:var(--txt3);margin-top:6px">${safe(w.revisedBy||'')} · ${w.revisedAt||''}</div></div>`:''}
     ${(w.status==='done'||w.status==='approved')?`<div class="divider"></div>
       <p class="sec-label" style="margin-top:6px">✅ Tamamlama</p>
       <div style="font-size:12px;color:var(--txt3);margin-bottom:6px">${safe(w.doneBy||'')} · ${w.doneAt||''}</div>
@@ -1711,7 +1715,8 @@ function openWorkOrderDetail(id){
       ${w.status==='approved'?`<div style="font-size:12px;color:var(--gtxt);font-weight:600">👍 ${safe(w.approvedBy||'')} onayladı · ${w.approvedAt||''}</div>`:''}`:''}
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
       ${(w.status==='open'&&isAssignee)?`<button class="btn btn-primary" style="flex:1" onclick="openCompleteWorkOrder('${w.id}')">✅ İş Tamamlandı</button>`:''}
-      ${(w.status==='done'&&isOwner)?`<button class="btn btn-primary" style="flex:1" onclick="approveWorkOrder('${w.id}')">👍 Onayla</button>`:''}
+      ${(w.status==='done'&&isOwner)?`<button class="btn btn-primary" style="flex:1" onclick="approveWorkOrder('${w.id}')">👍 Onayla</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="reviseWorkOrder('${w.id}')">🔄 Revizeye Gönder</button>`:''}
       ${isOwner?`<button class="btn btn-danger btn-sm" onclick="deleteWorkOrder('${w.id}')" title="Sil">🗑️</button>`:''}
     </div>`;
   openModal('modal-workorder');
@@ -1733,7 +1738,10 @@ function renderWoCompleteBody(id){
     <div class="form-group">
       <label class="form-label">📷 Fotoğraf <span style="font-weight:400;text-transform:none;color:var(--txt3)">(isteğe bağlı)</span></label>
       <div id="wo-photos" style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0">${(_woDone.photos||[]).map((u,i)=>woPhotoThumb(u,i,'done')).join('')}</div>
-      <button class="btn btn-secondary btn-sm" onclick="woPickPhoto('done')">📷 Fotoğraf Ekle</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" style="flex:1" onclick="woPickPhoto('done','camera')">📷 Kameradan Çek</button>
+        <button class="btn btn-secondary btn-sm" style="flex:1" onclick="woPickPhoto('done','device')">🖼️ Cihazdan Yükle</button>
+      </div>
     </div>
     <button class="btn btn-primary btn-full" onclick="saveCompleteWorkOrder('${id}')">✅ Tamamla</button>`;
 }
@@ -1772,6 +1780,27 @@ async function approveWorkOrder(id){
     updateNotifBell();
   }catch(e){ toast('❌ '+e.message,5000); }
 }
+/* İşi revizeye gönder (oluşturan/yönetici beğenmezse) → tekrar "açık"a döner, atanana bildirim */
+async function reviseWorkOrder(id){
+  const w=(S.workOrders||[]).find(x=>x.id===id); if(!w) return;
+  const note=await promptDialog({title:'🔄 Revizeye Gönder',message:'Neyin düzeltilmesi gerekiyor? (görevli kişiye iletilir)',multiline:true,okText:'Gönder',placeholder:'Örn: fotoğraf net değil, tekrar çekin…'});
+  if(note===null) return;               // iptal
+  w.status='open';                       // tekrar açık — görevli yeniden tamamlar
+  w.revisionNote=(note||'').trim();
+  w.revisedBy=S.cur?.fullname||S.cur?.username||'—'; w.revisedAt=nowStr(); w.revisedTs=Date.now();
+  try{
+    await save();
+    closeModal('modal-workorder'); renderWorkOrders();
+    toast('🔄 Revizeye gönderildi');
+    const targets=(w.assignees||[]).filter(uid=>uid!==S.cur?.id);
+    if(targets.length){
+      await saveNotifSafe({ id:'n'+Date.now(), type:'wo_revise', woId:w.id, toIds:targets,
+        equipName:'🔄 Revize İstendi', mahalName:w.title, by:w.revisedBy,
+        note:`🔄 "${w.title}" işi revizeye gönderildi.${w.revisionNote?' Not: '+w.revisionNote:''}`, date:nowStr(), ts:Date.now(), readBy:[] });
+    }
+    updateNotifBell();
+  }catch(e){ toast('❌ '+e.message,5000); }
+}
 async function deleteWorkOrder(id){
   const w=(S.workOrders||[]).find(x=>x.id===id); if(!w) return;
   if(!await confirmDialog({title:'İş Emrini Sil',message:`"${safe(w.title)}" iş emri silinecek.`,danger:true,okText:'Sil'})) return;
@@ -1780,7 +1809,13 @@ async function deleteWorkOrder(id){
 }
 
 /* ── İş emri fotoğrafları (Storage) ── */
-function woPickPhoto(target){ _woPhotoTarget=target; const inp=document.getElementById('wo-photo-input'); if(inp){ inp.value=''; inp.click(); } }
+function woPickPhoto(target, mode){
+  _woPhotoTarget=target;
+  const inp=document.getElementById('wo-photo-input'); if(!inp) return;
+  // Kamera → capture ile doğrudan kamera; Cihazdan → capture yok (galeri/dosya)
+  if(mode==='camera') inp.setAttribute('capture','environment'); else inp.removeAttribute('capture');
+  inp.value=''; inp.click();
+}
 function woPhotoThumb(url,i,target){
   return `<div style="position:relative;width:66px;height:66px;border-radius:8px;overflow:hidden;border:1px solid var(--brd)">
     <img src="${url}" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="window.open('${url}','_blank')"/>
@@ -1851,11 +1886,20 @@ function buildCompanyDocTree(){
     });
     nodes.push(mahalNode);
   });
-  // Manuel klasörler
-  (S.companyFolders||[]).forEach(f=>{
-    nodes.push({ id:'man_'+f.id, name:f.name, icon:'📁', manual:true, folderId:f.id, docs:f.docs||[], open:_docTreeOpen['man_'+f.id] });
-  });
+  // Manuel klasörler (iç içe / alt klasör destekli — parentId ile)
+  const manuals=(S.companyFolders||[]);
+  const buildManual=(parentId)=>manuals
+    .filter(f=>(f.parentId||null)===(parentId||null))
+    .map(f=>({ id:'man_'+f.id, name:f.name, icon:'📁', manual:true, folderId:f.id,
+      docs:f.docs||[], children:buildManual(f.id), open:_docTreeOpen['man_'+f.id] }));
+  buildManual(null).forEach(n=>nodes.push(n));
   return nodes;
+}
+/* Klasörün tam yolu (Ana › Alt) — taşıma seçicisinde okunur etiket */
+function companyFolderPath(f){
+  let parts=[f.name], p=f.parentId, guard=0;
+  while(p && guard++<12){ const pf=(S.companyFolders||[]).find(x=>x.id===p); if(!pf) break; parts.unshift(pf.name); p=pf.parentId; }
+  return parts.join(' › ');
 }
 
 function renderDocNode(node, depth){
@@ -1868,7 +1912,8 @@ function renderDocNode(node, depth){
         <span class="doc-tree-chevron ${open?'open':''}">▶</span>
         <span style="font-size:15px">${open?'📂':(node.icon||'📁')}</span>
         <span style="flex:1;font-size:12.5px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(node.name)}</span>
-        ${node.manual?`<button class="doc-mini-btn" onclick="event.stopPropagation();renameCompanyFolder('${node.folderId}')" title="Yeniden Adlandır" style="font-size:13px">✏️</button>
+        ${node.manual?`<button class="doc-mini-btn" onclick="event.stopPropagation();addCompanyFolder('${node.folderId}')" title="Alt Klasör Ekle" style="font-size:13px">📁➕</button>
+        <button class="doc-mini-btn" onclick="event.stopPropagation();renameCompanyFolder('${node.folderId}')" title="Yeniden Adlandır" style="font-size:13px">✏️</button>
         <button class="doc-mini-btn" onclick="event.stopPropagation();uploadToCompanyFolder('${node.folderId}')" title="Belge Yükle" style="font-size:13px">⬆️</button>
         <button class="doc-mini-btn" onclick="event.stopPropagation();deleteCompanyFolder('${node.folderId}')" title="Sil" style="font-size:13px">🗑️</button>`:''}
       </div>`;
@@ -1897,20 +1942,29 @@ function renderDocNode(node, depth){
 
 function toggleDocNode(id){ _docTreeOpen[id]=!_docTreeOpen[id]; renderCompanyDocs(); }
 
-async function addCompanyFolder(){
-  const name=await promptDialog({title:'Yeni Klasör',message:'Klasör adı:',placeholder:'örn: Genel Belgeler',okText:'Oluştur'});
+async function addCompanyFolder(parentId){
+  const name=await promptDialog({title: parentId?'Yeni Alt Klasör':'Yeni Klasör', message:'Klasör adı:', placeholder:'örn: Genel Belgeler', okText:'Oluştur'});
   if(name===null||!name.trim()) return;
   if(!S.companyFolders) S.companyFolders=[];
-  S.companyFolders.push({ id:'cf'+Date.now(), name:name.trim(), docs:[] });
+  const nf={ id:'cf'+Date.now(), name:name.trim(), docs:[] };
+  if(parentId) nf.parentId=parentId;
+  S.companyFolders.push(nf);
+  if(parentId) _docTreeOpen['man_'+parentId]=true; // ebeveyni aç ki yeni alt klasör görünsün
   try{ await save(); renderCompanyDocs(); toast('✅ Klasör oluşturuldu'); }
   catch(e){ toast('❌ '+e.message,5000); }
 }
 
 async function deleteCompanyFolder(fid){
   const f=(S.companyFolders||[]).find(x=>x.id===fid); if(!f) return;
-  if(!await confirmDialog({title:'Klasörü Sil',message:`"${safe(f.name)}" ve içindeki ${(f.docs||[]).length} belge silinecek.`,danger:true,okText:'Sil'})) return;
-  for(const d of (f.docs||[])){ try{ if(d.path) await _storage.ref(d.path).delete(); }catch(e){} }
-  S.companyFolders=S.companyFolders.filter(x=>x.id!==fid);
+  // Alt klasörleri özyinelemeli topla
+  const toDelete=[]; const collect=(id)=>{ toDelete.push(id); (S.companyFolders||[]).filter(x=>x.parentId===id).forEach(c=>collect(c.id)); };
+  collect(fid);
+  const bucket=(S.companyFolders||[]).filter(x=>toDelete.includes(x.id));
+  const docCount=bucket.reduce((n,x)=>n+(x.docs||[]).length,0);
+  const subCount=toDelete.length-1;
+  if(!await confirmDialog({title:'Klasörü Sil',message:`"${safe(f.name)}"${subCount?` ve ${subCount} alt klasör`:''} + içindeki ${docCount} belge silinecek.`,danger:true,okText:'Sil'})) return;
+  for(const x of bucket){ for(const d of (x.docs||[])){ try{ if(d.path) await _storage.ref(d.path).delete(); }catch(e){} } }
+  S.companyFolders=S.companyFolders.filter(x=>!toDelete.includes(x.id));
   try{ await save(); renderCompanyDocs(); toast('🗑️ Silindi'); }catch(e){ toast('❌ '+e.message); }
 }
 
@@ -1941,7 +1995,7 @@ function pickFolderDialog(title, folders){
 async function moveCompanyDoc(fromFid, docId){
   const from=(S.companyFolders||[]).find(x=>x.id===fromFid); if(!from) return;
   const doc=(from.docs||[]).find(d=>d.id===docId); if(!doc) return;
-  const targets=(S.companyFolders||[]).filter(x=>x.id!==fromFid);
+  const targets=(S.companyFolders||[]).filter(x=>x.id!==fromFid).map(x=>({ id:x.id, name:companyFolderPath(x) }));
   if(!targets.length){ toast('⚠️ Taşınacak başka klasör yok — önce klasör ekleyin'); return; }
   const toId=await pickFolderDialog('📁 Hangi klasöre taşınsın?', targets);
   if(!toId) return;
