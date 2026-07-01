@@ -5094,9 +5094,9 @@ async function captureScanPage(){
   canvas.width=w; canvas.height=h;
   canvas.getContext('2d').drawImage(video,0,0,w,h);
   let url=canvas.toDataURL('image/jpeg',0.92);
-  // Arka planda otomatik belge düzeltme (kenar bulursa perspektif düzeltir, bulamazsa fotoğrafı bırakır) — kullanıcıya soru yok
-  const t=showPersistentToast('🔍 Belge işleniyor…');
-  try{ url=await cropDocument(url); }catch(e){}
+  // Otomatik: kenar düzelt + belge efekti (beyaz zemin) — kullanıcıya soru yok
+  const t=showPersistentToast('🔍 Belge taranıyor…');
+  try{ url=await processScan(url); }catch(e){}
   hidePersistentToast(t);
   _scanRawPages.push(url);
   updateScanCount();
@@ -5242,6 +5242,56 @@ function warpFromCorners(dataUrl, corners){
       const out=document.createElement('canvas'); out.width=cw; out.height=ch;
       out.getContext('2d').drawImage(canvas, x0,y0,cw,ch, 0,0,cw,ch);
       resolve(out.toDataURL('image/jpeg',0.92));
+    };
+    img.onerror=()=>resolve(dataUrl);
+    img.src=dataUrl;
+  });
+}
+
+/* ── BELGE EFEKTİ ("magic") — zemini beyazlat, gölgeleri temizle, kontrastı artır.
+   Fotoğrafı gerçek "taranmış belge" görünümüne çevirir. Renk korunur. ── */
+function scanMagic(srcMat){
+  const cv=window.cv;
+  let rgb=new cv.Mat(), bg=new cv.Mat(), out=new cv.Mat(), rgba=new cv.Mat();
+  try{
+    cv.cvtColor(srcMat, rgb, cv.COLOR_RGBA2RGB);
+    // Arka plan tahmini: büyük bulanıklaştırma (düzgün olmayan ışığı/gölgeyi yakalar)
+    let k=Math.round(Math.min(rgb.rows,rgb.cols)/16); if(k<25)k=25; if(k%2===0)k++;
+    cv.GaussianBlur(rgb, bg, new cv.Size(k,k), 0);
+    // Böl: piksel / arka plan * 255 → kağıt beyaz olur, yazı koyu kalır (klasik tarayıcı efekti)
+    cv.divide(rgb, bg, out, 255);
+    // Hafif kontrast/parlaklık
+    out.convertTo(out, -1, 1.12, -8);
+    cv.cvtColor(out, rgba, cv.COLOR_RGB2RGBA);
+    return rgba.clone();
+  }catch(e){ console.warn('scanMagic:', e); return srcMat.clone(); }
+  finally{ rgb.delete(); bg.delete(); out.delete(); rgba.delete(); }
+}
+
+/* Tek akış: kenar bul → perspektif düzelt (bulursa) → belge efekti (HER ZAMAN).
+   Kullanıcıya hiç soru sorulmaz; sonuç doğrudan taranmış belge. */
+async function processScan(dataUrl){
+  try{ await loadOpenCV(); }catch(e){ return dataUrl; }
+  return new Promise((resolve)=>{
+    const img=new Image();
+    img.onload=()=>{
+      try{
+        const cv=window.cv;
+        const canvas=document.createElement('canvas');
+        canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
+        canvas.getContext('2d').drawImage(img,0,0);
+        let src=cv.imread(canvas);
+        // 1) Belgeyi kenarından yakala + düzleştir (bulursa)
+        let doc;
+        const corners=detectDocCorners(src);
+        if(corners){ doc=warpDocumentMat(src, corners); src.delete(); }
+        else { doc=src; }
+        // 2) Belge efekti — her durumda uygulanır (beyaz zemin + net)
+        const enhanced=scanMagic(doc); doc.delete();
+        const out=document.createElement('canvas');
+        cv.imshow(out, enhanced); enhanced.delete();
+        resolve(out.toDataURL('image/jpeg',0.9));
+      }catch(e){ console.warn('processScan:', e); resolve(dataUrl); }
     };
     img.onerror=()=>resolve(dataUrl);
     img.src=dataUrl;
@@ -5564,7 +5614,7 @@ async function onGalleryPicked(ev){
   for(const file of files){
     try{
       const dataUrl=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); });
-      const cropped=await cropDocument(dataUrl);
+      const cropped=await processScan(dataUrl);
       _scanRawPages.push(cropped);
     }catch(e){}
   }
