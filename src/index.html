@@ -60,6 +60,17 @@
   </div>
 </div>
 
+<!-- İŞ EMRİ MODALI -->
+<div class="modal-ov" id="modal-workorder">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <button class="modal-x" data-close="modal-workorder">✕</button>
+    <h2 class="modal-title" id="wo-title">🗂️ İş Emri</h2>
+    <div id="wo-body" style="margin-top:8px"></div>
+  </div>
+</div>
+<input type="file" id="wo-photo-input" accept="image/*" style="display:none" onchange="onWoPhotoSelected(event)"/>
+
 <!-- RİSK ANALİZİ MODALI -->
 <div class="modal-ov" id="modal-risk">
   <div class="modal" style="max-width:560px">
@@ -233,6 +244,7 @@
           </div>
           <div class="home-side">
             <div id="company-docs-wrap"></div>
+            <div id="workorder-wrap" style="margin-top:16px"></div>
           </div>
         </div>
       </div>
