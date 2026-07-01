@@ -7222,7 +7222,7 @@ function populateMahalSelects(){
 function populateCatSelects(){
   ['inp-equip-cat','edit-equip-cat'].forEach(id=>{
     const s=document.getElementById(id); if(!s) return;
-    let html=allCats().map(c=>`<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+    let html=allCats().map(c=>`<option value="${c.id}">${c.icon} ${safe(c.name)}</option>`).join('');
     // Ekipman ekleme select'inde "Yeni Tür Ekle" seçeneği
     if(id==='inp-equip-cat') html+=`<option value="__new__">➕ Yeni Tür Ekle…</option>`;
     s.innerHTML=html;
