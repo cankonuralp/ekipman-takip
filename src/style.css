@@ -679,7 +679,7 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
 .fb-usage-fill{height:100%;border-radius:6px;transition:width .4s}
 
 /* ── ONAY MODALI ── */
-.confirm-ov{align-items:center!important}
+.confirm-ov{align-items:center!important;z-index:10075!important}
 .confirm-modal{
   max-width:340px!important;border-radius:var(--r20)!important;
   padding:28px 24px 24px!important;text-align:center;

@@ -949,6 +949,7 @@ let _companiesListener=null;
 let _storage=null;        // Firebase Storage (belge arşivi)
 let _storageReady=false;
 let _globalDocs={ folders:[] };  // Genel evraklar (süper admin belge ağacı) — başta tanımlı olmalı
+let _globalDocOpen={};           // klasör aç/kapa durumu (yerel, kalıcı değil — varsayılan KAPALI)
 let _docTreeOpen={};             // Şirket belge ağacı açık/kapalı durumları — başta tanımlı olmalı
 let _listener=null;
 let _fbConnected=false;   // Firebase sunucu bağlantısı var mı
@@ -2027,7 +2028,7 @@ function renderGlobalDocs(){
 }
 
 function renderGlobalFolder(f){
-  const open=!!f.open;
+  const open=!!_globalDocOpen[f.id];
   const docs=f.docs||[];
   return `
     <div style="margin-bottom:4px">
@@ -2131,8 +2132,8 @@ async function sendGlobalDocToCompany(fid, docId){
 }
 
 function toggleGlobalFolder(fid){
-  const f=(_globalDocs.folders||[]).find(x=>x.id===fid);
-  if(f){ f.open=!f.open; renderGlobalDocs(); }
+  _globalDocOpen[fid]=!_globalDocOpen[fid];
+  renderGlobalDocs();
 }
 
 async function deleteGlobalFolder(fid){
