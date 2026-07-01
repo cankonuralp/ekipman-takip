@@ -6901,10 +6901,13 @@ function renderProfile(){
     <div class="divider"></div>
     <button class="btn btn-danger btn-full" onclick="doLogout()">🚪 Çıkış Yap</button>`;
 
-  if(isAdmin()){
+  // Kullanıcı listesi + ekleme: "Kullanıcı Yönetimi" bölümüyle (manage_users) tutarlı
+  if(canDo('manage_users')){
     renderUserList();
-    renderCatManageList();
     document.getElementById('btn-add-user-prof')?.addEventListener('click',openAddUser);
+  }
+  if(isAdmin()){
+    renderCatManageList();
     document.getElementById('restore-file-input')?.addEventListener('change',handleRestoreFile);
     const actEl=document.getElementById('activity-list');
     if(actEl){
