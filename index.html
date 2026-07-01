@@ -5738,8 +5738,8 @@ function _renderHomeRest(now){
     grid.appendChild(card);
   });
 
-  // Mahal ekle kartı (sadece admin)
-  if(isAdmin()){
+  // Mahal ekle kartı (mahal ekleme yetkisi olanlar)
+  if(canDo('add_mahal')){
     const addCard=document.createElement('div');
     addCard.className='mahal-add-card';
     addCard.innerHTML='<span style="font-size:26px">➕</span><div style="font-size:13px;font-weight:600;margin-top:8px;color:var(--txt2)">Mahal Ekle</div>';
@@ -5747,7 +5747,7 @@ function _renderHomeRest(now){
     grid.appendChild(addCard);
   }
 
-  if(!S.mahals.length&&!isAdmin()){
+  if(!S.mahals.length&&!canDo('add_mahal')){
     grid.innerHTML=`<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">🏨</div><p>Henüz mahal eklenmedi.</p></div>`;
   }
 }
@@ -9507,6 +9507,8 @@ function selectNewCatIcon(ic, btn){
   btn.classList.add('active');
 }
 async function saveNewCat(){
+  const _g=_catModalMode==='global-add'||_catModalMode==='global-edit';
+  if(_g ? !isSuperAdmin() : !canDo('manage_types')){ toast('🚫 Yetkiniz yok'); return; }
   const name=document.getElementById('newcat-name').value.trim();
   if(!name){ toast('⚠️ Tür adı girin'); return; }
   const icon=S.newCatIcon||'📦';
