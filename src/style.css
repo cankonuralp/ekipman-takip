@@ -881,9 +881,9 @@ body.has-company-band .topbar{ padding-top:10px; }
 .qr-ico-btn:active{transform:scale(.9)}
 .qr-ico-btn.qr-ico-scan{background:var(--accent);border-color:var(--accent);color:#fff}
 
-/* QR tarayıcı modalı her zaman en üstte (denetim modalının üstünde açılsın) */
-#modal-scan{z-index:500}
-#modal-scan .modal-x{z-index:520}
+/* QR tarayıcı modalı her zaman EN ÜSTTE (denetim modalı 10050 + şirketler ekranı 9997'nin üstünde) */
+#modal-scan{z-index:10100}
+#modal-scan .modal-x{z-index:10120}
 
 /* Eksik zorunlu alan — kırmızı çerçeve uyarısı */
 .crit-item.insp-invalid{border:2px solid #ef4444!important;box-shadow:0 0 0 3px rgba(239,68,68,.12);animation:invalidPulse .4s ease}
