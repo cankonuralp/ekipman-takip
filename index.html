@@ -1647,9 +1647,9 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
       <p style="font-size:11px;color:var(--txt3);margin-top:4px">Varsayılan: 365 gün (1 yıl)</p>
     </div>
     <div class="form-group">
-      <label class="form-label">📎 BELGELER <span style="font-weight:400;text-transform:none;color:var(--txt3);font-size:11px">(ileride)</span></label>
+      <label class="form-label">📎 BELGELER</label>
       <input class="form-input" id="ret-documents" type="number" min="1" placeholder="730"/>
-      <p style="font-size:11px;color:var(--txt3);margin-top:4px">Varsayılan: 730 gün (2 yıl)</p>
+      <p style="font-size:11px;color:var(--txt3);margin-top:4px">Varsayılan: 730 gün (2 yıl) · Sabitlenmiş 📌 belgeler silinmez · Silinen 30 gün çöpte kalır</p>
     </div>
     <div class="form-group">
       <label class="form-label">🔔 BİLDİRİMLER</label>
@@ -2711,7 +2711,30 @@ async function runRetentionCleanup(){
     });
     if(S.workOrders.length!==before) changed=true;
   }
-  // (Belgeler ileride Storage ile — ret.documents kullanılacak)
+  // Belgeler: yüklenmesinin üzerinden ret.documents gün geçenler çöpe taşınır (30 gün geri alınabilir).
+  // Sabitlenmiş (pinned) belgeler süresiz saklanır. Tarihi bilinmeyen eski belgeler silinmez.
+  if(ret.documents>0){
+    const docJobs=[];
+    (S.equips||[]).forEach(e=>{
+      (e.documents||[]).forEach(d=>{
+        if(d.pinned) return;
+        const a=ageDays(null, d.ts);
+        if(a!==null && a>ret.documents) docJobs.push({holder:e, d, origin:'Ekipman: '+(e.name||''), kind:'equip'});
+      });
+    });
+    (S.companyFolders||[]).forEach(f=>{
+      (f.docs||[]).forEach(d=>{
+        const a=ageDays(null, d.ts);
+        if(a!==null && a>ret.documents) docJobs.push({holder:f, d, origin:'Klasör: '+(f.name||''), kind:'folder'});
+      });
+    });
+    for(const j of docJobs){
+      await trashDoc(j.d, j.origin+' · süre doldu');
+      if(j.kind==='equip') j.holder.documents=(j.holder.documents||[]).filter(x=>x.id!==j.d.id);
+      else j.holder.docs=(j.holder.docs||[]).filter(x=>x.id!==j.d.id);
+    }
+    if(docJobs.length){ changed=true; console.log('[Retention] belge çöpe taşındı:', docJobs.length); }
+  }
 
   if(changed){
     try{ await save(); }catch(e){}
@@ -2731,12 +2754,28 @@ function estimateDbBytes(){
 }
 
 /* Yüklenen belgelerin toplam boyutu (Storage) — denetim/ekipman eklerindeki dosyalardan */
+let _companyTrashBytes=0; // bu şirketin çöpteki (henüz kalıcı silinmemiş) dosyalarının boyutu
 function estimateStorageBytes(){
-  // Gerçek belgeler e.documents[].size'da (ekipman belgeleri) + şirket klasörleri.
+  // Gerçek belgeler e.documents[].size'da (ekipman belgeleri) + şirket klasörleri + çöpteki dosyalar.
   let total=0;
   (S.equips||[]).forEach(e=>{ (e.documents||[]).forEach(d=>{ total+=(d.size||0); }); });
   (S.companyFolders||[]).forEach(f=>{ (f.docs||[]).forEach(d=>{ total+=(d.size||0); }); });
+  total+=_companyTrashBytes; // çöp 30 gün Storage'da yer kaplar
   return total;
+}
+
+/* Bu şirketin çöpteki dosya boyutunu yükle (depolama barı doğru göstersin) */
+async function loadCompanyTrashBytes(){
+  _companyTrashBytes=0;
+  if(!_db || !S.activeCompanyId) return;
+  try{
+    const snap=await _db.ref(`${TENANT_ROOT}/trash`).once('value');
+    if(snap.exists()) snap.forEach(ch=>{
+      if(String(ch.key).startsWith('_')) return;
+      const v=ch.val()||{};
+      if(v.cid===S.activeCompanyId) _companyTrashBytes+=(v.size||0);
+    });
+  }catch(e){}
 }
 
 function getQuotaLimits(){
@@ -3153,6 +3192,8 @@ async function bindCompanyData(companyId){
 
   // Şirket bazlı günlük otomatik yedek (o gün ilk giren kullanıcı tetikler)
   setTimeout(()=>autoBackupCompanyIfNeeded(companyId), 5000);
+  // Çöpteki dosya boyutunu yükle → depolama barı doğru göstersin
+  setTimeout(()=>{ loadCompanyTrashBytes().then(()=>{ try{ renderFbUsage(); }catch(e){} }); }, 2500);
 
   // Bu şirkette süper admin değilse, kullanıcılar şirkete özel. Süper admin için ayrı.
   return true;
@@ -3376,8 +3417,22 @@ async function switchToCompany(cid){
 let _companyStats={}; // {cid: {bytes, equips, reports, users}}
 
 /* Her şirketin veri boyutunu/sayılarını Firebase'den oku */
+let _trashByCid={};        // çöpteki dosyaların şirket başına boyutu (kota barları için)
+let _trashGlobalBytes=0;   // genel evraklardan çöpe gidenlerin boyutu
 async function loadCompanyStats(){
   if(!_db) return;
+  // Çöpteki dosyalar da Storage kotasında yer kaplar — şirket başına topla
+  _trashByCid={}; _trashGlobalBytes=0;
+  try{
+    const tSnap=await _db.ref(`${TENANT_ROOT}/trash`).once('value');
+    if(tSnap.exists()) tSnap.forEach(ch=>{
+      if(String(ch.key).startsWith('_')) return;
+      const v=ch.val()||{};
+      const cid=v.cid||'_global';
+      _trashByCid[cid]=(_trashByCid[cid]||0)+(v.size||0);
+    });
+    _trashGlobalBytes=_trashByCid['_global']||0;
+  }catch(e){}
   for(const c of S.companies){
     try{
       const snap=await _db.ref(companyDataPath(c.id)).once('value');
@@ -3385,7 +3440,7 @@ async function loadCompanyStats(){
         const d=snap.val();
         const bytes=new Blob([JSON.stringify(d)]).size;
         // Belge boyutları (storage): ekipman belgeleri + şirket klasörü belgeleri (f.docs)
-        let storageBytes=0;
+        let storageBytes=_trashByCid[c.id]||0; // çöpteki dosyalar dahil
         (toArr(d.equips||[])).forEach(e=>{ (e.documents||[]).forEach(doc=>{ storageBytes+=(doc.size||0); }); });
         (toArr(d.companyFolders||[])).forEach(f=>{ (f.docs||[]).forEach(doc=>{ storageBytes+=(doc.size||0); }); });
         // Global karşılaştırma için: uygunsuz rapor sayısı, son 30 gün denetim, açık iş emri
@@ -3470,8 +3525,9 @@ function renderCompaniesScreen(skipReload){
   // Toplam veri sayacı — şirket içindeki "Veri & Depolama Takibi" kutusunun BİREBİR aynısı
   let totalBytes=0, totalStorageBytes=0, totalEquips=0, totalReports=0;
   S.companies.forEach(c=>{ const s=_companyStats[c.id]; if(s){ totalBytes+=s.bytes||0; totalStorageBytes+=s.storageBytes||0; totalEquips+=s.equips||0; totalReports+=s.reports||0; } });
-  // Genel evraklar (global) da Storage kotasına dahil
+  // Genel evraklar (global) da Storage kotasına dahil + genel evrak çöpü
   (_globalDocs.folders||[]).forEach(f=>{ (f.docs||[]).forEach(d=>{ totalStorageBytes+=(d.size||0); }); });
+  totalStorageBytes+=_trashGlobalBytes;
   const totalEl=document.getElementById('companies-total');
   if(totalEl){
     if(!S.companies.length){ totalEl.innerHTML=''; }
@@ -4244,12 +4300,18 @@ async function moveSelectedDocs(){
 const TRASH_DAYS=30;
 async function trashDoc(d, origin, cidOverride){
   if(!d||!d.path||!_db) return;
+  // Genel Evraklar'dan gönderilen kopyalar dosyanın SAHİBİ değil — dosyaya dokunma,
+  // yoksa 30 gün sonra kalıcı temizlik orijinali ve diğer şirketlerin kopyalarını öldürür.
+  if(d.fromGlobal) return;
   try{
     await _db.ref(`${TENANT_ROOT}/trash`).push({
       name:d.name||'—', type:d.type||'', path:d.path, url:d.url||'', size:d.size||0,
       cid:cidOverride||S.activeCompanyId||'_global', origin:origin||'',
       deletedAt:nowStr(), ts:Date.now(), by:S.cur?.fullname||S.cur?.username||'—'
     });
+    // Depolama barı doğru kalsın: çöpe giden dosya hâlâ Storage'da yer kaplıyor
+    const cid=cidOverride||S.activeCompanyId||'_global';
+    if(cid===S.activeCompanyId) _companyTrashBytes+=(d.size||0);
   }catch(e){ console.warn('trash:', e.message); }
 }
 
@@ -10029,7 +10091,10 @@ async function deleteMahal(){
   if(!canDo('del_mahal')){ toast('🚫 Yetkiniz yok'); return; }
   const m=mahalById(S.editMahalId); if(!m) return;
   if(!await confirmDialog({title:'Mahal Silinsin mi?',message:`"${m.name}" ve içindeki tüm ekipman/raporlar kalıcı olarak silinecek.`,danger:true,okText:'Evet, Sil'})) return;
-  const ids=S.equips.filter(e=>e.mahalId===S.editMahalId).map(e=>e.id);
+  const delEquips=S.equips.filter(e=>e.mahalId===S.editMahalId);
+  const ids=delEquips.map(e=>e.id);
+  // Silinen ekipmanların belgeleri çöpe (dosyalar Storage'da sahipsiz kalmasın, 30 gün geri alınabilir)
+  for(const e of delEquips){ for(const d of (e.documents||[])){ await trashDoc(d, 'Silinen mahal: '+(m.name||'')); } }
   S.equips  =S.equips.filter(e=>e.mahalId!==S.editMahalId);
   S.reports =S.reports.filter(r=>!ids.includes(r.equipId));
   S.mahals  =S.mahals.filter(x=>x.id!==S.editMahalId);
@@ -10810,6 +10875,8 @@ async function deleteEquip(){
   if(!canDo('del_equip')){ toast('🚫 Yetkiniz yok'); return; }
   const e=equipById(S.editEquipId); if(!e) return;
   if(!await confirmDialog({title:'Ekipman Silinsin mi?',message:`"${e.name}" ve denetim raporları kalıcı olarak silinecek.`,danger:true,okText:'Evet, Sil'})) return;
+  // Ekipmanın belgeleri çöpe (dosyalar Storage'da sahipsiz kalmasın, 30 gün geri alınabilir)
+  for(const d of (e.documents||[])){ await trashDoc(d, 'Silinen ekipman: '+(e.name||'')); }
   S.equips  =S.equips.filter(x=>x.id!==S.editEquipId);
   S.reports =S.reports.filter(r=>r.equipId!==S.editEquipId);
   logActivity('equip_del', `"${e.name}" ekipmanı silindi`);
