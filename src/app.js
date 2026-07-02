@@ -1969,7 +1969,7 @@ function renderCompanyDocs(){
     </div>`;
 }
 function docsBodyHTML(){
-  const q=(_docSearch||'').trim().toLowerCase();
+  const q=(_docSearch||'').trim();
   const canManage=canDo('manage_docs');
   if(q) return renderDocSearchResults(q,canManage);
   const tree=buildCompanyDocTree();
@@ -1978,27 +1978,59 @@ function docsBodyHTML(){
 let _docsRenderTimer=null;
 function updateDocsBodyDebounced(){ clearTimeout(_docsRenderTimer); _docsRenderTimer=setTimeout(()=>{ const b=document.getElementById('company-docs-body'); if(b) b.innerHTML=docsBodyHTML(); },180); }
 
-/* Arama sonuçları — tüm belgeleri (otomatik+manuel) düz liste olarak süz */
+/* Türkçe uyumlu küçük harf (İ/ı sorunu için) */
+const trLow=s=>String(s||'').toLocaleLowerCase('tr');
+
+/* Arama sonuçları — belge ADI + klasör/mahal/küme/ekipman ADI eşleşmesi */
 function renderDocSearchResults(q, canManage){
+  q=trLow(q);
   const rows=[];
+  // Otomatik taraf: mahal/küme/ekipman adı eşleşirse o ekipmanın TÜM belgeleri; yoksa adı eşleşen belgeler
   (S.mahals||[]).forEach(m=>{
     (S.equips||[]).filter(e=>e.mahalId===m.id).forEach(e=>{
       const loc=m.name+(e.cluster?(' › '+e.cluster):'')+' › '+e.name;
-      (e.documents||[]).forEach(d=>{ if((d.name||'').toLowerCase().includes(q)) rows.push({d, loc, manual:false}); });
+      const ctxMatch=trLow(m.name).includes(q)||trLow(e.cluster).includes(q)||trLow(e.name).includes(q);
+      (e.documents||[]).forEach(d=>{ if(ctxMatch||trLow(d.name).includes(q)) rows.push({d, loc, manual:false, equipId:e.id}); });
     });
   });
+  // Manuel taraf: klasör yolu eşleşirse klasördeki TÜM belgeler; yoksa adı eşleşen belgeler
   (S.companyFolders||[]).forEach(f=>{
-    (f.docs||[]).forEach(d=>{ if((d.name||'').toLowerCase().includes(q)) rows.push({d, loc:companyFolderPath(f), folderId:f.id, manual:true}); });
+    const path=companyFolderPath(f);
+    const ctxMatch=trLow(path).includes(q);
+    (f.docs||[]).forEach(d=>{ if(ctxMatch||trLow(d.name).includes(q)) rows.push({d, loc:path, folderId:f.id, manual:true}); });
   });
-  if(!rows.length) return '<div style="padding:18px;text-align:center;color:var(--txt3);font-size:12px">Eşleşen belge yok.</div>';
-  return rows.map(r=>`<div class="doc-tree-row" style="padding-left:9px">
+  // Adı eşleşen MANUEL KLASÖRLER (tıklayınca ağaçta açılır)
+  const folderHits=(S.companyFolders||[]).filter(f=>trLow(f.name).includes(q));
+  if(!rows.length && !folderHits.length) return '<div style="padding:18px;text-align:center;color:var(--txt3);font-size:12px">Eşleşen belge veya klasör yok.</div>';
+  let html='';
+  folderHits.forEach(f=>{
+    html+=`<div class="doc-tree-row" style="padding-left:9px" onclick="openFolderFromSearch('${f.id}')">
+      <span style="font-size:15px">📁</span>
+      <span style="flex:1;min-width:0">
+        <div style="font-size:12.5px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(f.name)}</div>
+        <div style="font-size:10.5px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(companyFolderPath(f))} · ${(f.docs||[]).length} belge — tıkla, ağaçta aç</div>
+      </span>
+    </div>`;
+  });
+  html+=rows.map(r=>`<div class="doc-tree-row" style="padding-left:9px">
     <span style="font-size:13px">${r.d.type==='application/pdf'?'📄':'🖼️'}</span>
     <span style="flex:1;min-width:0;cursor:pointer" onclick="window.open('${r.d.url}','_blank')">
       <div style="font-size:12.5px;color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(r.d.name)}</div>
       <div style="font-size:10.5px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(r.loc)}</div>
     </span>
-    ${(r.manual&&canManage)?`<button class="doc-mini-btn" onclick="moveCompanyDoc('${r.folderId}','${r.d.id}')" title="Taşı" style="font-size:12px">➡️</button>`:''}
+    ${(r.manual&&canManage)?`<button class="doc-mini-btn" onclick="moveCompanyDoc('${r.folderId}','${r.d.id}')" title="Taşı" style="font-size:12px">➡️</button>
+    <button class="doc-mini-btn" onclick="deleteCompanyDoc('${r.folderId}','${r.d.id}')" title="Sil" style="font-size:12px">🗑️</button>`:''}
+    ${(!r.manual&&canManage)?`<button class="doc-mini-btn" onclick="deleteAutoDoc('${r.equipId}','${r.d.id}')" title="Sil" style="font-size:12px">🗑️</button>`:''}
   </div>`).join('');
+  return html;
+}
+
+/* Arama sonucundaki klasöre tıklayınca: aramayı temizle, klasörü (ve üstlerini) ağaçta aç */
+function openFolderFromSearch(fid){
+  _docSearch='';
+  let f=(S.companyFolders||[]).find(x=>x.id===fid), guard=0;
+  while(f && guard++<15){ _docTreeOpen['man_'+f.id]=true; f=(S.companyFolders||[]).find(x=>x.id===f.parentId); }
+  renderCompanyDocs();
 }
 
 /* Belge ağacını kur: otomatik (mahal>ekipman) + manuel klasörler */
@@ -2345,7 +2377,7 @@ function renderGlobalDocs(){
     </div>`;
 }
 function gdocsBodyHTML(){
-  const q=(_gdocSearch||'').trim().toLowerCase();
+  const q=(_gdocSearch||'').trim();
   if(q) return renderGlobalSearchResults(q);
   const roots=(_globalDocs.folders||[]).filter(f=>!f.parentId);
   return roots.length?roots.map(f=>renderGlobalFolder(f,0)).join(''):'<div style="padding:18px;text-align:center;color:var(--txt3);font-size:12.5px">Henüz klasör yok. ➕ ile ekleyin.</div>';
@@ -2359,14 +2391,28 @@ function globalFolderPath(f){
   while(p && guard++<12){ const pf=(_globalDocs.folders||[]).find(x=>x.id===p); if(!pf) break; parts.unshift(pf.name); p=pf.parentId; }
   return parts.join(' › ');
 }
-/* Genel evrak arama sonuçları (düz liste) */
+/* Genel evrak arama sonuçları — belge ADI + klasör ADI eşleşmesi */
 function renderGlobalSearchResults(q){
+  q=trLow(q);
   const rows=[];
   (_globalDocs.folders||[]).forEach(f=>{
-    (f.docs||[]).forEach(d=>{ if((d.name||'').toLowerCase().includes(q)) rows.push({d, f}); });
+    const path=globalFolderPath(f);
+    const ctxMatch=trLow(path).includes(q);
+    (f.docs||[]).forEach(d=>{ if(ctxMatch||trLow(d.name).includes(q)) rows.push({d, f}); });
   });
-  if(!rows.length) return '<div style="padding:18px;text-align:center;color:var(--txt3);font-size:12px">Eşleşen belge yok.</div>';
-  return rows.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px">
+  const folderHits=(_globalDocs.folders||[]).filter(f=>trLow(f.name).includes(q));
+  if(!rows.length && !folderHits.length) return '<div style="padding:18px;text-align:center;color:var(--txt3);font-size:12px">Eşleşen belge veya klasör yok.</div>';
+  let html='';
+  folderHits.forEach(f=>{
+    html+=`<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer" onclick="openGlobalFolderFromSearch('${f.id}')">
+      <span style="font-size:15px">📁</span>
+      <span style="flex:1;min-width:0">
+        <div style="font-size:12.5px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(f.name)}</div>
+        <div style="font-size:10.5px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(globalFolderPath(f))} · ${(f.docs||[]).length} belge — tıkla, aç</div>
+      </span>
+    </div>`;
+  });
+  html+=rows.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px">
     <span style="font-size:14px">${r.d.type==='application/pdf'?'📄':'🖼️'}</span>
     <span style="flex:1;min-width:0;cursor:pointer" onclick="window.open('${r.d.url}','_blank')">
       <div style="font-size:12.5px;color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(r.d.name)}</div>
@@ -2374,6 +2420,15 @@ function renderGlobalSearchResults(q){
     </span>
     <button class="doc-mini-btn" onclick="sendGlobalDocToCompany('${r.f.id}','${r.d.id}')" title="Şirkete Gönder" style="font-size:13px">📤</button>
   </div>`).join('');
+  return html;
+}
+
+/* Genel evrak aramasından klasöre git: aramayı temizle, klasörü (ve üstlerini) aç */
+function openGlobalFolderFromSearch(fid){
+  _gdocSearch='';
+  let f=(_globalDocs.folders||[]).find(x=>x.id===fid), guard=0;
+  while(f && guard++<15){ _globalDocOpen[f.id]=true; f=(_globalDocs.folders||[]).find(x=>x.id===f.parentId); }
+  renderGlobalDocs();
 }
 
 function renderGlobalFolder(f, depth){
