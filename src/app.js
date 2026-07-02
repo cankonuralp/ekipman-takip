@@ -1786,7 +1786,7 @@ function openWorkOrderDetail(id){
       ${(w.donePhotos||[]).length?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">${w.donePhotos.map(u=>`<img src="${u}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;cursor:pointer" onclick="window.open('${u}','_blank')"/>`).join('')}</div>`:''}
       ${w.status==='approved'?`<div style="font-size:12px;color:var(--gtxt);font-weight:600">👍 ${safe(w.approvedBy||'')} onayladı · ${w.approvedAt||''}</div>`:''}`:''}
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
-      ${(w.status==='open'&&isAssignee)?`<button class="btn btn-primary" style="flex:1" onclick="openCompleteWorkOrder('${w.id}')">✅ İş Tamamlandı</button>`:''}
+      ${(w.status==='open'&&(isAssignee||isOwner))?`<button class="btn btn-primary" style="flex:1" onclick="openCompleteWorkOrder('${w.id}')">✅ İş Tamamlandı</button>`:''}
       ${(w.status==='done'&&isOwner)?`<button class="btn btn-primary" style="flex:1" onclick="approveWorkOrder('${w.id}')">👍 Onayla</button>
       <button class="btn btn-secondary" style="flex:1" onclick="reviseWorkOrder('${w.id}')">🔄 Revizeye Gönder</button>`:''}
       ${isOwner?`<button class="btn btn-danger btn-sm" onclick="deleteWorkOrder('${w.id}')" title="Sil">🗑️</button>`:''}
@@ -1823,15 +1823,28 @@ async function saveCompleteWorkOrder(id){
   if(!note){ toast('⚠️ Tamamlama notu yazın'); return; }
   w.status='done'; w.doneNote=note; w.donePhotos=_woDone.photos||[];
   w.doneBy=S.cur?.fullname||S.cur?.username||'—'; w.doneById=S.cur?.id||null; w.doneAt=nowStr(); w.doneTs=Date.now();
+  // Tamamlayan, işi OLUŞTURAN (veya admin) ise onay adımı atlanır → direkt onaylı
+  const selfClose = w.byId===S.cur?.id || isAdmin() || S.cur?.isSuper;
+  if(selfClose){ w.status='approved'; w.approvedBy=w.doneBy; w.approvedAt=w.doneAt; w.approvedTs=w.doneTs; }
   try{
     await save();
     closeModal('modal-workorder'); _woDone=null;
     renderWorkOrders();
-    toast('✅ İş tamamlandı — yönetici onayı bekleniyor');
-    if(w.byId){
-      await saveNotifSafe({ id:'n'+Date.now(), type:'wo_done', woId:w.id, toIds:[w.byId],
-        equipName:'✅ İş Tamamlandı', mahalName:w.title, by:w.doneBy,
-        note:`✅ "${w.title}" işi tamamlandı (${w.doneBy}) — onayınızı bekliyor.`, date:nowStr(), ts:Date.now(), readBy:[] });
+    if(selfClose){
+      toast('✅ İş emri tamamlandı olarak kapatıldı');
+      const targets=(w.assignees||[]).filter(uid=>uid!==S.cur?.id);
+      if(targets.length){
+        await saveNotifSafe({ id:'n'+Date.now(), type:'wo_approved', woId:w.id, toIds:targets,
+          equipName:'✅ İş Emri Kapatıldı', mahalName:w.title, by:w.doneBy,
+          note:`✅ "${w.title}" iş emri ${w.doneBy} tarafından tamamlandı olarak kapatıldı.`, date:nowStr(), ts:Date.now(), readBy:[] });
+      }
+    } else {
+      toast('✅ İş tamamlandı — yönetici onayı bekleniyor');
+      if(w.byId){
+        await saveNotifSafe({ id:'n'+Date.now(), type:'wo_done', woId:w.id, toIds:[w.byId],
+          equipName:'✅ İş Tamamlandı', mahalName:w.title, by:w.doneBy,
+          note:`✅ "${w.title}" işi tamamlandı (${w.doneBy}) — onayınızı bekliyor.`, date:nowStr(), ts:Date.now(), readBy:[] });
+      }
     }
     updateNotifBell();
   }catch(e){ toast('❌ '+e.message,5000); }
@@ -1994,10 +2007,10 @@ function buildCompanyDocTree(){
   (S.mahals||[]).forEach(m=>{
     const equipsWithDocs=(S.equips||[]).filter(e=>e.mahalId===m.id && (e.documents||[]).length>0);
     if(!equipsWithDocs.length) return;
-    const mahalNode={ id:'auto_m_'+m.id, name:m.name, icon:'🏢', auto:true, children:[], open:_docTreeOpen['auto_m_'+m.id] };
+    const mahalNode={ id:'auto_m_'+m.id, name:m.name, icon:'🏢', auto:true, mahalId:m.id, children:[], open:_docTreeOpen['auto_m_'+m.id] };
     equipsWithDocs.forEach(e=>{
       const catName=(catById(e.cat)||{}).name||'Diğer';
-      const eqNode={ id:'auto_e_'+e.id, name:e.name+' · '+catName, icon:'🔧', auto:true, docs:(e.documents||[]).map(d=>({...d, _equipId:e.id})), open:_docTreeOpen['auto_e_'+e.id] };
+      const eqNode={ id:'auto_e_'+e.id, name:e.name+' · '+catName, icon:'🔧', auto:true, equipId:e.id, docs:(e.documents||[]).map(d=>({...d, _equipId:e.id})), open:_docTreeOpen['auto_e_'+e.id] };
       mahalNode.children.push(eqNode);
     });
     nodes.push(mahalNode);
@@ -2032,6 +2045,8 @@ function renderDocNode(node, depth){
         <button class="doc-mini-btn" onclick="event.stopPropagation();renameCompanyFolder('${node.folderId}')" title="Yeniden Adlandır" style="font-size:13px">✏️</button>
         <button class="doc-mini-btn" onclick="event.stopPropagation();uploadToCompanyFolder('${node.folderId}')" title="Belge Yükle" style="font-size:13px">⬆️</button>
         <button class="doc-mini-btn" onclick="event.stopPropagation();deleteCompanyFolder('${node.folderId}')" title="Sil" style="font-size:13px">🗑️</button>`:''}
+        ${(node.auto&&node.equipId&&canManage)?`<button class="doc-mini-btn" onclick="event.stopPropagation();deleteAutoEquipDocs('${node.equipId}')" title="Bu ekipmanın tüm belgelerini sil" style="font-size:13px">🗑️</button>`:''}
+        ${(node.auto&&node.mahalId&&canManage)?`<button class="doc-mini-btn" onclick="event.stopPropagation();deleteAutoMahalDocs('${node.mahalId}')" title="Bu mahaldeki tüm ekipman belgelerini sil" style="font-size:13px">🗑️</button>`:''}
       </div>`;
   if(open){
     // Alt klasörler (ekipmanlar / manuel alt klasörler)
@@ -2046,6 +2061,7 @@ function renderDocNode(node, depth){
           <span style="flex:1;font-size:12px;color:var(--txt2);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onclick="window.open('${d.url}','_blank')">${safe(d.name)}</span>
           ${(node.manual&&canManage&&!_docSelectMode)?`<button class="doc-mini-btn" onclick="moveCompanyDoc('${node.folderId}','${d.id}')" title="Başka klasöre taşı" style="font-size:12px">➡️</button>
           <button class="doc-mini-btn" onclick="deleteCompanyDoc('${node.folderId}','${d.id}')" title="Sil" style="font-size:12px">🗑️</button>`:''}
+          ${(node.auto&&d._equipId&&canManage)?`<button class="doc-mini-btn" onclick="deleteAutoDoc('${d._equipId}','${d.id}')" title="Sil" style="font-size:12px">🗑️</button>`:''}
         </div>`;
       });
     }
@@ -2056,6 +2072,45 @@ function renderDocNode(node, depth){
   }
   html+=`</div>`;
   return html;
+}
+
+/* ── Otomatik (Mahal→Ekipman) düğümlerinden silme ──
+   Belge ekipmanın kaydından silinir (ekipmanın kendisi silinmez); dosya 30 gün çöpte kalır. */
+async function deleteAutoDoc(equipId, docId){
+  if(!canDo('manage_docs')){ toast('🚫 Belge yönetim yetkiniz yok'); return; }
+  const e=equipById(equipId); if(!e) return;
+  const d=(e.documents||[]).find(x=>x.id===docId); if(!d) return;
+  if(!await confirmDialog({title:'Belgeyi Sil',message:`"${safe(d.name)}" ekipmandan silinecek (30 gün çöpte geri alınabilir).`,danger:true,okText:'Sil'})) return;
+  await trashDoc(d, 'Ekipman: '+(e.name||''));
+  e.documents=(e.documents||[]).filter(x=>x.id!==docId);
+  try{ await save(); renderCompanyDocs(); toast('🗑️ Silindi'); }catch(err){ toast('❌ '+err.message,5000); }
+}
+
+/* Bir ekipmanın TÜM belgelerini sil (klasörü boşalır → ağaçtan otomatik kalkar) */
+async function deleteAutoEquipDocs(equipId){
+  if(!canDo('manage_docs')){ toast('🚫 Belge yönetim yetkiniz yok'); return; }
+  const e=equipById(equipId); if(!e) return;
+  const docs=(e.documents||[]);
+  if(!docs.length){ toast('Bu ekipmanda belge yok'); return; }
+  if(!await confirmDialog({title:'Ekipman Belgelerini Sil',message:`"${safe(e.name)}" ekipmanındaki ${docs.length} belge silinecek (ekipman SİLİNMEZ; belgeler 30 gün çöpte geri alınabilir).`,danger:true,okText:'Sil'})) return;
+  for(const d of docs){ await trashDoc(d, 'Ekipman: '+(e.name||'')); }
+  e.documents=[];
+  try{ await save(); renderCompanyDocs(); toast(`🗑️ ${docs.length} belge silindi`); }catch(err){ toast('❌ '+err.message,5000); }
+}
+
+/* Bir mahaldeki TÜM ekipman belgelerini sil (mahal ve ekipmanlar SİLİNMEZ) */
+async function deleteAutoMahalDocs(mahalId){
+  if(!canDo('manage_docs')){ toast('🚫 Belge yönetim yetkiniz yok'); return; }
+  const m=mahalById(mahalId); if(!m) return;
+  const eqs=(S.equips||[]).filter(e=>e.mahalId===mahalId && (e.documents||[]).length>0);
+  const total=eqs.reduce((n,e)=>n+(e.documents||[]).length,0);
+  if(!total){ toast('Bu mahalde belge yok'); return; }
+  if(!await confirmDialog({title:'Mahal Belgelerini Sil',message:`"${safe(m.name)}" mahalindeki ${eqs.length} ekipmana ait ${total} belge silinecek (mahal ve ekipmanlar SİLİNMEZ; belgeler 30 gün çöpte geri alınabilir).`,danger:true,okText:'Sil'})) return;
+  for(const e of eqs){
+    for(const d of (e.documents||[])){ await trashDoc(d, 'Ekipman: '+(e.name||'')); }
+    e.documents=[];
+  }
+  try{ await save(); renderCompanyDocs(); toast(`🗑️ ${total} belge silindi`); }catch(err){ toast('❌ '+err.message,5000); }
 }
 
 function toggleDocNode(id){ _docTreeOpen[id]=!_docTreeOpen[id]; renderCompanyDocs(); }
