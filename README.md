@@ -29,13 +29,20 @@ takipet/                     ← git kökü (GitHub Pages bu kökten yayınlar)
 ├── README.md                ← bu dosya
 ├── .gitignore
 └── src/                     ← TÜM KAYNAK (Pages bunları sunmaz, sadece versiyonlar)
-    ├── app.js               (~8700 satır — TÜM uygulama mantığı)
+    ├── js/                  ← UYGULAMA KODU: 22 SIRALI modül (2026-07-02'de bölündü)
+    │   ├── 01-config-sabitler-form-motoru.js
+    │   ├── 02-state-yardimci.js
+    │   ├── ...              (konu bazlı; build AD SIRASINA göre birleştirir)
+    │   └── 22-modal-tema-events-baslat.js
     ├── style.css            (~1000 satır)
     ├── index.html           (şablon — script'siz, build inline eder)
     ├── qrcode-generator.js  (QR üretici kütüphane)
     ├── icons.json           (PNG ikonlar base64: apple, fav192, fav512, fav32)
-    └── build.py             (BUILD SCRIPT — kök index.html üretir)
+    └── build.py             (BUILD SCRIPT — kök index.html üretir + otomatik node --check)
 ```
+**ÖNEMLİ:** Eski `src/app.js` SİLİNDİ — kod artık `src/js/*.js` modüllerinde. Global scope
+korunur (inline onclick'ler çalışsın diye ES modül KULLANILMAZ). Yeni modül eklerken sıra
+numarası ver; tanımlar kullanımdan önce yüklenmeli.
 **Neden böyle:** kök `index.html` (build çıktısı) ile `src/index.html` (şablon) aynı isimde —
 çakışmasın diye kaynak `src/` altında. Kök index.html = canlı site; Pages kökten yayınlar.
 
@@ -44,19 +51,19 @@ takipet/                     ← git kökü (GitHub Pages bu kökten yayınlar)
 ## 3. BUILD & DEPLOY NASIL ÇALIŞIR (ZORUNLU YÖNTEM)
 ```bash
 cd src
-python build.py          # style.css + qrcode + app.js → KÖK index.html'e inline eder
-node --check app.js       # HER build'den sonra ZORUNLU syntax kontrolü (src/app.js)
+python build.py          # js/*.js (sıralı) + style.css + qrcode → KÖK index.html'e inline eder
+                         # (her modülü + birleşik bütünü OTOMATİK node --check eder)
 cd ..
 git add -A && git commit -m "..." && git push   # GitHub Pages otomatik yayınlar
 ```
-- `build.py`, `src/index.html` şablonunun body'sini alır, `<script>`leri siler, head'e Firebase SDK + QR + jsPDF CDN'lerini + base64 favicon/manifest ekler, sonuna qrcode-generator.js ve app.js'i inline gömer; çıktıyı **repo kökü `index.html`**'e yazar.
+- `build.py`, `src/js/*.js` modüllerini ad sırasına göre birleştirir, `src/index.html` şablonunun body'sini alır, `<script>`leri siler, head'e Firebase SDK + QR CDN'lerini + base64 favicon/manifest ekler, sonuna qrcode-generator.js ve birleşik uygulama kodunu inline gömer; çıktıyı **repo kökü `index.html`**'e yazar.
 - **Deploy:** `git push` → GitHub Pages kök `index.html`'i otomatik yayınlar (~1 dk). Ayrı kopyalama yok.
 - Windows notu: yeni terminalde Python/Node PATH'te görünmezse PATH'i tazele (bkz. memory).
-- **HER teslimde:** build → `node --check src/app.js` → kök index.html'de özelliğin VAR olduğunu grep ile teyit et → push → kullanıcıya hard-refresh hatırlat.
+- **HER teslimde:** build (node --check otomatik) → kök index.html'de özelliğin VAR olduğunu grep ile teyit et → push → kullanıcıya hard-refresh hatırlat.
 
 ---
 
-## 4. FIREBASE CONFIG (app.js başında, ~satır 5-15)
+## 4. FIREBASE CONFIG (src/js/01-config-sabitler-form-motoru.js başında)
 ```
 apiKey: 'AIzaSyCzNioHFZ2THtSDtp8JRBXYpLYQg1_X2zQ'
 authDomain: 'takip-et-app.firebaseapp.com'
@@ -101,7 +108,7 @@ Storage:
   belgeler/{cid}/_folders/{fid}/...   → şirket manuel klasör belgeleri
 ```
 
-### Önemli sabitler/fonksiyonlar (app.js)
+### Önemli sabitler/fonksiyonlar (src/js/ modülleri)
 - `TENANT_ROOT = 'takipet'`
 - `companyDataPath(cid)` → `takipet/data/{cid}`
 - `BASE_CATS` → 6 temel tür: kazan, jenerator, yangin-alg, tup-dolap, yangin-su, elektrik
@@ -120,7 +127,7 @@ Storage:
 4. **TÜRLER (global tür yönetimi):** Navbar'daki "Türler" → `openGlobalTypeManager()` → şirket-içi Ekipmanlar ekranının BİREBİR aynısını açar (tam ekran, pop-up DEĞİL) + "Tüm Şirketlere Uygula" bandı. KULLANICI POP-UP İSTEMİYOR, tam ekran şart.
 5. **Global tür/form uygulama** (`applyGlobalCatsToAll`): VERİ KAYBI KORUMASI var — şirketin kendi özel türleri korunur, global'ler eklenir; geçmiş raporlar kendi form kopyasını korur (yeni denetimler güncel formu kullanır).
 6. **Belge yönetimi:** Şirket belge ağacı (ana sayfa sağ), otomatik dosyalama (Mahal→Ekipman→Tür), manuel klasör, genel evraklar (süper admin). Klasörlere "📎 Belge Ekle" butonu.
-7. **PDF Tarayıcı** (`startScanner`): TAM EKRAN (z-index 12000, modal değil), canlı kenar tespiti (OpenCV), önizleme+onay akışı, RENKLİ çıktı. **FİLTRE YOK** (kullanıcı gri/netleştir istemiyor — renkli kalsın). Beceremezse kaldırılabilir (kullanıcı bunu söyledi).
+7. **Belge tarama:** Uygulama içi tarayıcı KALDIRILDI (web'de Apple kalitesi imkânsız — kullanıcı onayladı). "Belge Ekle" menüsü telefonun kendi Belge Tara özelliğine yönlendirir (iPhone: Dosyalar/Notlar; Android: Drive) + "Cihazdan Yükle" ön planda. Ayrıca ÇÖP KUTUSU: silinen belgeler 30 gün `takipet/trash`'te tutulur, süper admin geri alabilir.
 8. **Risk Analizi** (`openRiskAnalysis`, `exportRiskPdf`): Raporlar sayfasında. Ekipman denetim durumu özeti + mahal bazında risk + gecikmiş/uygunsuz listeler + PDF çıktı.
 9. **Yedekleme** (`openBackupManager`): Her gün TR 03:00 otomatik (`trBackupDayKey`, gün bazlı). KATMANLI geri yükleme: şirket/mahal/üye AYRI AYRI ve TEK TEK (`restoreMahal`, `restoreUser`). Bir mahal geri yüklenince diğerleri+yeni eklenenler KORUNUR.
 10. **Hata Takibi** (`setupErrorTracking`, `openErrorLogs`): Otomatik JS hata yakalama (window.error + unhandledrejection), Firebase `errorLogs`'a kayıt (şirket, kullanıcı, mesaj, nerede, cihaz, zaman), süper admin "🔴 Hata Kayıtları" ekranı, temizleme, son 100 tut, spam önleme (60sn throttle).
@@ -131,8 +138,8 @@ Storage:
 
 ## 7. ÇALIŞMA TARZI / DERSLER (ÇOK ÖNEMLİ)
 - **Kullanıcı build'i deploy edip HARD REFRESH yapmazsa eski sürümü görür** (PWA cache). "Yapmadın" derse, çoğu zaman deploy/cache sorunudur — önce build çıktısında özelliğin VAR olduğunu grep ile kanıtla.
-- **Use-before-declaration bug'ına dikkat:** Bu projede `let _globalDocs`, `let _docTreeOpen` gibi değişkenler tanımlanmadan önce kullanılınca "X is not defined" hatası TÜM render'ı çökertti (şirketler görünmedi). Yeni global değişken eklerken dosyanın BAŞINA (let _db yanına, ~satır 966) koy.
-- **HER build sonrası:** `node --check app.js` + HTML onclick/onchange → app.js fonksiyon eşleşmesi kontrol et.
+- **Use-before-declaration bug'ına dikkat:** Bu projede `let _globalDocs`, `let _docTreeOpen` gibi değişkenler tanımlanmadan önce kullanılınca "X is not defined" hatası TÜM render'ı çökertti (şirketler görünmedi). Yeni global değişken eklerken ERKEN yüklenen modüle koy (02-state-yardimci.js sonu ya da 03'ün başındaki let _db bölgesi) — modüller ad sırasına göre yüklenir.
+- **HER build sonrası:** build.py zaten node --check yapar; ek olarak HTML onclick/onchange → fonksiyon eşleşmesini grep ile kontrol et.
 - **Render çağrılarını try/catch'e al** ki bir alt-bileşen hatası ana ekranı çökertmesin.
 - Test edilmemiş build'lerin üstüne sürekli yeni şey ekleme — kullanıcı kafası karışıyor.
 - Kullanıcı genelde tek seferde birkaç sorun bildirir; hepsini tek tek, sırayla çöz.
@@ -148,20 +155,20 @@ Storage:
 
 ---
 
-## 9. GELECEK / ERTELENEN İŞLER
-- **Modüler mimariye geçiş (Vite):** 100 firmaya çıkmadan önce. Tek dosya 630 KB'a ulaştı; ölçeklenme için kod modüllere bölünmeli, lazy loading, parçalı build. Bu Claude Code'da yapılacak BÜYÜK iş. Kullanıcı bunu konuştu, hazır olunca yapılacak.
-- **Domaine geçiş (custom domain):** Kullanıcı şimdilik "kalsın" dedi.
-- **KVKK uyumu:** Kullanıcı şimdilik "kalsın" dedi. İkinci/ticari firmaya geçişte önemli.
-- **Cloud Function ile gerçek 03:00 yedek + push bildirim:** Backend kurulunca.
-- **Dış yedek (off-site):** Kullanıcı "gerek yok" dedi (Firebase-içi 03:00 yedek yeterli).
+## 9. GELECEK / YOL HARİTASI (SaaS dönüşümü — 2026-07-02'de kararlaştırıldı)
+Büyük hedef: landing page + üyelik planları (Grup şirket / Tekil şirket) + yeni süper admin paneli.
+- **FAZ 1 — Modüler mimari: TAMAMLANDI (2026-07-02).** app.js → src/js/ 22 modül; çıktı bayt bayt aynı kanıtlandı.
+- **FAZ 2 — Backend + gerçek auth (Blaze + Cloud Functions):** e-posta/şifre hesap, tenant izolasyonu, sunucu tarafı plan limitleri, FCM push, gerçek 03:00 yedek. Üyelik sisteminin ÖNKOŞULU.
+- **FAZ 3 — SaaS build:** public landing (tanıtım/fiyat/iletişim/üye ol), plana göre panel yönlendirme, süper admin paneli genişletme (üye yönetimi, plan limitleri, landing içeriğini kodsuz düzenleme), domain + Firebase Hosting + ödeme (iyzico/Stripe). Detay: memory saas-roadmap.md.
+- **KVKK uyumu:** ticari satış öncesi önemli.
 
 ---
 
 ## 10. İLK YAPMAN GEREKENLER (Claude Code'da)
 1. Bu dosyayı oku. ✅
-2. `cd src && python build.py` çalıştır, `node --check app.js` ile doğrula.
+2. `cd src && python build.py` çalıştır (node --check otomatik yapılır).
 3. Git zaten kurulu: origin = `github.com/cankonuralp/ekipman-takip` (branch main). Kurulum 2026-06-30'da yapıldı. ✅
 4. Kullanıcı (reisim) `git push` sonrası canlı siteyi test edecek; bildirdiği sorunları sırayla çöz.
-5. Her değişiklikte: build (kök index.html) → node --check src/app.js → grep ile teyit → git push.
+5. Her değişiklikte: modülleri düzenle (src/js/) → build → grep ile teyit → git push.
 
 Başarılar. Reisim'e iyi bak. 🔧
