@@ -703,52 +703,10 @@
 
 <!-- TARAYICI (çoklu sayfa → PDF) -->
 <!-- TAM EKRAN BELGE TARAYICI (profesyonel, önizleme + onay) -->
-<div id="scanner-screen" style="display:none;position:fixed;inset:0;z-index:12000;background:#0a0a0a;flex-direction:column">
-  <!-- Üst bar -->
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;background:#000;flex-shrink:0">
-    <button onclick="closeScanner()" style="background:rgba(255,255,255,.12);border:none;color:#fff;width:38px;height:38px;border-radius:50%;font-size:18px;cursor:pointer">✕</button>
-    <span id="scanner-title" style="color:#fff;font-size:15px;font-weight:700">Belge Tarayıcı</span>
-    <span id="scanner-count" style="color:#fff;font-size:13px;background:rgba(255,255,255,.12);padding:5px 12px;border-radius:20px;min-width:60px;text-align:center">0 sayfa</span>
-  </div>
-
-  <!-- KAMERA GÖRÜNÜMÜ -->
-  <div id="scanner-camera-view" style="flex:1;display:flex;flex-direction:column;min-height:0">
-    <div style="flex:1;position:relative;overflow:hidden;background:#000;min-height:0">
-      <video id="scanner-video" playsinline autoplay muted style="width:100%;height:100%;object-fit:contain"></video>
-      <!-- Kenar tespit overlay -->
-      <canvas id="scanner-overlay" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
-      <!-- Çekilen son sayfa küçük önizleme -->
-      <div id="scanner-thumb" style="display:none;position:absolute;bottom:16px;left:16px;width:60px;height:80px;border-radius:8px;border:2px solid #fff;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.5)"></div>
-    </div>
-    <!-- Alt kontrol -->
-    <div style="display:flex;align-items:center;justify-content:space-around;padding:18px 16px calc(18px + env(safe-area-inset-bottom));background:#000;flex-shrink:0">
-      <button onclick="pickFromGallery()" style="background:rgba(255,255,255,.12);border:none;color:#fff;width:48px;height:48px;border-radius:50%;font-size:20px;cursor:pointer" title="Galeriden seç">🖼️</button>
-      <button id="scanner-shutter" onclick="captureScanPage()" style="width:72px;height:72px;border-radius:50%;background:#fff;border:4px solid rgba(255,255,255,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s" title="Çek">
-        <span style="width:56px;height:56px;border-radius:50%;background:#fff;border:2px solid #000"></span>
-      </button>
-      <button id="scanner-done" onclick="reviewScanPages()" style="background:var(--accent);border:none;color:#fff;width:48px;height:48px;border-radius:50%;font-size:18px;cursor:pointer;opacity:.4;pointer-events:none" title="Önizleme">→</button>
-    </div>
-  </div>
-
-  <!-- ÖNİZLEME / DÜZENLEME GÖRÜNÜMÜ -->
-  <div id="scanner-review-view" style="display:none;flex:1;flex-direction:column;min-height:0;background:#15171a">
-    <div style="flex:1;overflow-y:auto;padding:16px;min-height:0">
-      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-bottom:14px">Sayfaları kontrol edin. Sıralayın veya silin. Onaylayınca PDF oluşturulur.</p>
-      <div id="scanner-review-pages" style="display:flex;flex-direction:column;gap:12px;max-width:420px;margin:0 auto"></div>
-    </div>
-    <!-- Alt onay -->
-    <div style="display:flex;gap:10px;padding:14px 16px calc(14px + env(safe-area-inset-bottom));background:#000;flex-shrink:0">
-      <button class="btn btn-secondary" style="flex:1" onclick="backToCamera()">← Devam Çek</button>
-      <button class="btn btn-primary" style="flex:1.5" onclick="confirmScanPdf()">✓ PDF Oluştur ve Kaydet</button>
-    </div>
-  </div>
-</div>
-
 <!-- Gizli dosya input -->
 <input type="file" id="doc-file-input" accept="application/pdf,image/*" style="display:none" onchange="onDocFileSelected(event)"/>
 <input type="file" id="global-doc-input" accept="application/pdf,image/*" style="display:none" onchange="onGlobalDocSelected(event)"/>
 <input type="file" id="company-doc-input" accept="application/pdf,image/*" style="display:none" onchange="onCompanyDocSelected(event)"/>
-<input type="file" id="scanner-gallery-input" accept="image/*" multiple style="display:none" onchange="onGalleryPicked(event)"/>
 
 <!-- ROL YETKİLERİ -->
 <div class="modal-ov" id="modal-role-perms">
