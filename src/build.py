@@ -2,16 +2,17 @@
 """
 TakipEt — Tek Dosya Build Script
 ================================
-Kaynak dosyaları (app.js + style.css + qrcode-generator.js) tek bir index.html
-içine inline eder. Çıktı: dist/index.html (GitHub Pages'e deploy edilecek tek dosya).
+Kaynak dosyaları (src/js/*.js modülleri + style.css + qrcode-generator.js) tek bir
+index.html içine inline eder. Çıktı: repo kökü index.html (GitHub Pages yayınlar).
+
+Uygulama kodu src/js/ altında SIRALI modüllerdedir (01-, 02-, ...). Build bunları
+ad sırasına göre birleştirir — global scope korunur, davranış tek dosyayla birebir aynı.
+Yeni modül eklerken sıra numarası ver; tanımlar kullanımdan önce gelmeli.
 
 Kullanım:
-    python build.py
-
-Build sonrası ZORUNLU kontrol:
-    node --check app.js     (syntax hatası var mı)
+    python build.py    (node varsa her modülü + bütünü otomatik node --check eder)
 """
-import re, json, base64, os, sys
+import re, json, base64, os, sys, glob, shutil, subprocess
 
 # Windows konsolu (cp1254) emoji basamaz; çıktıyı UTF-8'e zorla.
 try:
@@ -25,11 +26,42 @@ def read(name):
     with open(os.path.join(ROOT, name), encoding='utf-8') as f:
         return f.read()
 
+def read_js_bundle():
+    """src/js/*.js dosyalarını AD SIRASINA göre birleştir (01-, 02-, ...)."""
+    files = sorted(glob.glob(os.path.join(ROOT, 'js', '*.js')))
+    if not files:
+        raise SystemExit('HATA: src/js/*.js bulunamadı — modüller nerede?')
+    out = []
+    for f in files:
+        with open(f, encoding='utf-8', newline='') as fh:
+            out.append(fh.read())
+    return ''.join(out), files
+
+def node_check(files, bundle):
+    """Her modülü ve birleşik bütünü node --check ile doğrula (node varsa)."""
+    node = shutil.which('node')
+    if not node:
+        print('⚠️  UYARI: node bulunamadı — syntax kontrolü atlandı!')
+        return
+    for f in files:
+        r = subprocess.run([node, '--check', f], capture_output=True, text=True)
+        if r.returncode != 0:
+            raise SystemExit(f'❌ SYNTAX HATASI {os.path.basename(f)}:\n{r.stderr}')
+    tmp = os.path.join(ROOT, 'js', '_bundle.tmp.js')
+    with open(tmp, 'w', encoding='utf-8', newline='') as fh:
+        fh.write(bundle)
+    r = subprocess.run([node, '--check', tmp], capture_output=True, text=True)
+    os.remove(tmp)
+    if r.returncode != 0:
+        raise SystemExit(f'❌ SYNTAX HATASI (birleşik bundle):\n{r.stderr}')
+    print(f'✅ node --check: {len(files)} modül + bundle TEMİZ')
+
 def main():
     # 1) Kaynakları oku
     css  = read('style.css')
     qr   = read('qrcode-generator.js')
-    app  = read('app.js')
+    app, js_files = read_js_bundle()
+    node_check(js_files, app)
     html = read('index.html')
     icons = json.loads(read('icons.json'))
 
@@ -112,11 +144,9 @@ def main():
         f.write(out)
 
     kb = len(out) // 1024
-    print(f"✅ BUILD TAMAM: index.html ({kb} KB) -> repo kökü")
+    print(f"✅ BUILD TAMAM: index.html ({kb} KB) -> repo kökü ({len(js_files)} JS modülü)")
     print("")
-    print("Sonraki adım:")
-    print("  1) node --check src/app.js   → syntax kontrolü")
-    print("  2) git add -A && git commit && git push → GitHub Pages'e deploy")
+    print("Sonraki adım: git add -A && git commit && git push → GitHub Pages'e deploy")
 
 if __name__ == '__main__':
     main()
