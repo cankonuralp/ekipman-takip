@@ -415,7 +415,6 @@ async function doLogin(){
     renderCompaniesScreen();
     // Otomatik yedekleme (günlük, arka planda)
     setTimeout(()=>{ autoBackupIfNeeded(); purgeTrashIfNeeded(); }, 3000);
-    setTimeout(()=>writeAuthDiag(), 1500); // GEÇİCİ teşhis
     return;
   }
 
@@ -433,7 +432,6 @@ async function doLogin(){
   }catch(e){ showLoading(false); toast('❌ Şirket verisine bağlanılamadı: '+e.message,5000); return; }
   showLoading(false);
   bootApp();
-  setTimeout(()=>writeAuthDiag(), 1500); // GEÇİCİ teşhis
   // Girişsiz QR sonrası yönlendirme
   let pq=_pendingQR;
   if(!pq){ try{ pq=sessionStorage.getItem('te_pendingQR'); }catch(e){} }

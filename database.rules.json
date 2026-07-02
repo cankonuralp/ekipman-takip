@@ -1,8 +1,70 @@
 {
   "rules": {
     "takipet": {
-      ".read": "auth != null",
-      ".write": "auth != null"
+      "companies": {
+        ".read": "auth != null && (auth.token.isSuper === true || auth.token.cid != null)",
+        ".write": "auth != null && auth.token.isSuper === true"
+      },
+      "data": {
+        "$cid": {
+          ".read": "auth != null && (auth.token.isSuper === true || auth.token.cid === $cid)",
+          ".write": "auth != null && (auth.token.isSuper === true || auth.token.cid === $cid)"
+        }
+      },
+      "superadmin": {
+        ".read": "auth != null && auth.token.isSuper === true",
+        ".write": "auth != null && auth.token.isSuper === true"
+      },
+      "superlogs": {
+        ".read": "auth != null && auth.token.isSuper === true",
+        ".write": "auth != null && auth.token.isSuper === true"
+      },
+      "globalContact": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.token.isSuper === true"
+      },
+      "globalCats": {
+        ".read": "auth != null && (auth.token.isSuper === true || auth.token.cid != null)",
+        ".write": "auth != null && auth.token.isSuper === true"
+      },
+      "globalDocs": {
+        ".read": "auth != null && (auth.token.isSuper === true || auth.token.cid != null)",
+        ".write": "auth != null && auth.token.isSuper === true"
+      },
+      "errorLogs": {
+        ".read": "auth != null && auth.token.isSuper === true",
+        ".write": "auth != null"
+      },
+      "backups": {
+        "system": {
+          ".read": "auth != null && auth.token.isSuper === true",
+          ".write": "auth != null && auth.token.isSuper === true"
+        },
+        "_lastAutoDay": {
+          ".read": "auth != null && auth.token.isSuper === true",
+          ".write": "auth != null && auth.token.isSuper === true"
+        },
+        "_lastAutoDayCompany": {
+          "$cid": {
+            ".read": "auth != null && (auth.token.isSuper === true || auth.token.cid === $cid)",
+            ".write": "auth != null && (auth.token.isSuper === true || auth.token.cid === $cid)"
+          }
+        },
+        "company": {
+          "$cid": {
+            ".read": "auth != null && (auth.token.isSuper === true || auth.token.cid === $cid)",
+            ".write": "auth != null && (auth.token.isSuper === true || auth.token.cid === $cid)"
+          }
+        },
+        "mahal": {
+          ".read": "auth != null && auth.token.isSuper === true",
+          ".write": "auth != null && auth.token.isSuper === true"
+        }
+      },
+      "trash": {
+        ".read": "auth != null && auth.token.isSuper === true",
+        ".write": "auth != null && (auth.token.isSuper === true || auth.token.cid != null)"
+      }
     }
   }
 }
