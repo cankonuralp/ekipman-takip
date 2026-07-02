@@ -3123,14 +3123,7 @@ async function initFirebase(){
     }catch(e){}
 
     // Şirket kataloğunu dinle (süper admin yönetir)
-    _companiesListener = _companiesRef.on('value', snap=>{
-      const d = snap && snap.exists() ? snap.val() : {};
-      S.companies = toArr(d).filter(c=>c && c.id);
-      // Süper admin şirket listesi ekranındaysa güncelle
-      if(S.cur && S.cur.isSuper && !S.activeCompanyId){ try{ renderCompaniesScreen&&renderCompaniesScreen(); }catch(e){} }
-    }, err=>{
-      console.error('[Companies]', err.code, err.message);
-    });
+    attachCompaniesListener();
 
     S.fbReady = true;
     return true;
@@ -3139,6 +3132,22 @@ async function initFirebase(){
     showConnectionError('Firebase bağlantı hatası: '+e.message);
     return false;
   }
+}
+
+/* Şirket kataloğu dinleyicisi — girişten SONRA yeniden bağlanabilir olmalı:
+   kilitli kurallarda anonim dinleyici iptal edilir; token alınınca tazelenir. */
+function attachCompaniesListener(){
+  if(!_companiesRef) return;
+  if(_companiesListener){ try{ _companiesRef.off('value', _companiesListener); }catch(e){} }
+  _companiesListener = _companiesRef.on('value', snap=>{
+    const d = snap && snap.exists() ? snap.val() : {};
+    S.companies = toArr(d).filter(c=>c && c.id);
+    // Süper admin şirket listesi ekranındaysa güncelle
+    if(S.cur && S.cur.isSuper && !S.activeCompanyId){ try{ renderCompaniesScreen&&renderCompaniesScreen(); }catch(e){} }
+  }, err=>{
+    // Girişsizken izin reddi NORMALDİR (kilitli kurallar) — giriş sonrası yeniden bağlanır
+    console.warn('[Companies]', err.code||'', err.message||'');
+  });
 }
 
 /* GEÇİCİ TEŞHİS — giriş sonrası tarayıcı kimliğinin custom-token claim'lerini
@@ -3211,6 +3220,11 @@ async function bindCompanyData(companyId){
     hideSyncBar();
   }, err=>{
     console.error('[Firebase data]', err.code, err.message);
+    // Kilitli kurallar: eski (token'sız) oturum veriye erişemez → temiz yeniden giriş iste
+    if(String(err.code||err.message||'').toLowerCase().includes('permission')){
+      try{ forceLogout('Güvenlik güncellemesi yapıldı — lütfen tekrar giriş yapın.'); }catch(e){}
+      return;
+    }
     toast('❌ Firebase hatası: '+err.message, 5000);
   });
 
@@ -6013,6 +6027,7 @@ async function doLogin(){
       if(d&&d.token){
         try{ await firebase.auth(firebase.app('takipet')).signInWithCustomToken(d.token); }
         catch(e){ console.warn('Özel token girişi:', e.message); }
+        try{ attachCompaniesListener(); }catch(e){} // yeni kimlikle dinleyiciyi tazele
         user=d.user; loginCompanyId=d.companyId||null; isSuperLogin=!!d.isSuper;
         cloudDone=true;
       }

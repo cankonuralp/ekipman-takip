@@ -369,6 +369,7 @@ async function doLogin(){
       if(d&&d.token){
         try{ await firebase.auth(firebase.app('takipet')).signInWithCustomToken(d.token); }
         catch(e){ console.warn('Özel token girişi:', e.message); }
+        try{ attachCompaniesListener(); }catch(e){} // yeni kimlikle dinleyiciyi tazele
         user=d.user; loginCompanyId=d.companyId||null; isSuperLogin=!!d.isSuper;
         cloudDone=true;
       }
