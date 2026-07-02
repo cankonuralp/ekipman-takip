@@ -262,9 +262,12 @@ async function initApp(){
     }
   }
 
-  // Login ekranı
-  document.getElementById('login-screen').style.display='flex';
+  // Oturum yok: QR deep-link varsa GİRİŞ ekranı, yoksa ANASAYFA (landing)
   renderLoginContact();
+  let urlHasQR=false;
+  try{ urlHasQR = /[?&]q=/.test(location.search) || !!sessionStorage.getItem('te_pendingQR'); }catch(e){}
+  if(urlHasQR){ showLogin(); }
+  else { try{ showLanding(); }catch(e){ document.getElementById('login-screen').style.display='flex'; } }
   checkQRDeepLink();
 }
 

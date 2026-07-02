@@ -1013,6 +1013,100 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
 .doc-tree-chevron.open{transform:rotate(90deg)}
 
 
+/* ════════════════════════════════════════
+   ANASAYFA (LANDING — Faz 3)
+   ════════════════════════════════════════ */
+#landing-screen{
+  position:fixed; inset:0; z-index:9996; overflow-y:auto;
+  background:var(--bg); color:var(--txt);
+  font-family:'Inter',system-ui,sans-serif;
+}
+/* Üst bar */
+.lnd-nav{
+  position:sticky; top:0; z-index:5; display:flex; align-items:center; justify-content:space-between;
+  padding:14px clamp(16px,5vw,48px); background:color-mix(in srgb,var(--bg) 82%,transparent);
+  backdrop-filter:blur(12px); border-bottom:1px solid var(--brd);
+}
+.lnd-brand{ font-size:19px; font-weight:800; letter-spacing:-.3px; display:flex; align-items:center; gap:7px; }
+.lnd-logo{ font-size:22px; }
+.lnd-nav-links{ display:flex; align-items:center; gap:clamp(10px,2vw,26px); }
+.lnd-nav-links a{ color:var(--txt2); text-decoration:none; font-size:14px; font-weight:600; transition:color .15s; }
+.lnd-nav-links a:hover{ color:var(--txt); }
+@media(max-width:640px){ .lnd-nav-links a{ display:none; } }
+/* Hero */
+.lnd-hero{
+  padding:clamp(48px,9vw,110px) clamp(16px,5vw,48px) clamp(40px,7vw,80px);
+  text-align:center;
+  background:radial-gradient(1200px 500px at 50% -10%, color-mix(in srgb,var(--accent) 22%,transparent), transparent 70%);
+}
+.lnd-hero-in{ max-width:820px; margin:0 auto; }
+.lnd-badge{
+  display:inline-block; padding:7px 16px; border-radius:30px; font-size:13px; font-weight:700;
+  background:var(--card); border:1px solid var(--brd); color:var(--txt2); margin-bottom:22px; box-shadow:var(--sh1);
+}
+.lnd-hero h1{
+  font-size:clamp(32px,6vw,58px); font-weight:800; line-height:1.08; letter-spacing:-1.5px; margin-bottom:20px;
+}
+.lnd-hero h1 span{ background:linear-gradient(120deg,var(--accent),#a78bfa); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+.lnd-hero-sub, #lnd-hero-sub{ font-size:clamp(15px,2.2vw,20px); color:var(--txt2); line-height:1.6; max-width:620px; margin:0 auto 32px; }
+.lnd-hero-btns{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+.lnd-hero-btns .btn{ padding:13px 28px; font-size:15.5px; }
+.lnd-hero-note{ margin-top:18px; font-size:13px; color:var(--txt3); }
+/* Bölümler */
+.lnd-sec{ padding:clamp(44px,7vw,84px) clamp(16px,5vw,48px); max-width:1100px; margin:0 auto; }
+.lnd-sec-alt{ background:var(--bg2); max-width:none; }
+.lnd-sec-alt > *{ max-width:1100px; margin-left:auto; margin-right:auto; }
+.lnd-sec-title{ font-size:clamp(24px,4vw,38px); font-weight:800; text-align:center; letter-spacing:-.6px; margin-bottom:12px; }
+.lnd-sec-sub{ text-align:center; color:var(--txt2); font-size:15px; margin-bottom:40px; }
+/* Özellik kartları */
+.lnd-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:18px; }
+.lnd-card{
+  background:var(--card); border:1px solid var(--brd); border-radius:var(--r16); padding:26px 22px;
+  box-shadow:var(--sh1); transition:transform .18s, box-shadow .18s;
+}
+.lnd-card:hover{ transform:translateY(-4px); box-shadow:var(--sh2); }
+.lnd-card-ico{ font-size:32px; margin-bottom:14px; }
+.lnd-card h3{ font-size:17px; font-weight:700; margin-bottom:8px; }
+.lnd-card p{ font-size:13.5px; color:var(--txt2); line-height:1.55; }
+/* Planlar */
+.lnd-plans{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:20px; max-width:900px; margin:0 auto; }
+.lnd-plan{
+  background:var(--card); border:1.5px solid var(--brd); border-radius:var(--r20); padding:30px 26px;
+  display:flex; flex-direction:column; box-shadow:var(--sh1); position:relative;
+}
+.lnd-plan.featured{ border-color:var(--accent); box-shadow:var(--sh2); }
+.lnd-plan-tag{
+  position:absolute; top:-12px; left:50%; transform:translateX(-50%);
+  background:var(--accent); color:#fff; font-size:12px; font-weight:700; padding:4px 14px; border-radius:20px;
+}
+.lnd-plan h3{ font-size:20px; font-weight:800; margin-bottom:4px; }
+.lnd-plan-desc{ font-size:13px; color:var(--txt2); margin-bottom:18px; min-height:36px; }
+.lnd-plan-price{ font-size:38px; font-weight:800; letter-spacing:-1px; }
+.lnd-plan-price small{ font-size:15px; font-weight:600; color:var(--txt3); }
+.lnd-plan-old{ font-size:15px; color:var(--txt3); text-decoration:line-through; margin-left:8px; }
+.lnd-plan ul{ list-style:none; margin:20px 0; padding:0; display:flex; flex-direction:column; gap:11px; }
+.lnd-plan li{ font-size:14px; color:var(--txt2); display:flex; gap:9px; align-items:flex-start; }
+.lnd-plan li::before{ content:'✓'; color:var(--green); font-weight:800; flex-shrink:0; }
+.lnd-plan .btn{ margin-top:auto; width:100%; justify-content:center; padding:12px; }
+/* İletişim */
+.lnd-contact-box{ max-width:460px; margin:0 auto; display:flex; flex-direction:column; gap:12px; }
+.lnd-contact-row{
+  display:flex; align-items:center; gap:12px; padding:16px 20px; background:var(--card);
+  border:1px solid var(--brd); border-radius:var(--r12); text-decoration:none; color:var(--txt);
+  font-size:15px; font-weight:600; box-shadow:var(--sh1); transition:transform .15s;
+}
+.lnd-contact-row:hover{ transform:translateY(-2px); }
+/* Footer */
+.lnd-footer{ padding:36px 24px; text-align:center; border-top:1px solid var(--brd); color:var(--txt2); font-size:14px; }
+.lnd-footer-sub{ font-size:12px; color:var(--txt3); margin-top:6px; }
+/* Login'de anasayfa dönüş linki */
+.lnd-back-link{
+  position:absolute; top:16px; left:16px; background:none; border:none; color:var(--txt2);
+  font-size:13px; font-weight:600; cursor:pointer; padding:6px 8px; border-radius:8px;
+}
+.lnd-back-link:hover{ color:var(--txt); background:var(--bg2); }
+.login-card{ position:relative; }
+
 </style>
 </head>
 <body>
@@ -1033,9 +1127,63 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
   <button id="btn-retry-conn" style="padding:12px 28px;background:#ef4444;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer">↺ Tekrar Dene</button>
 </div>
 
+<!-- ══════ ANASAYFA (LANDING — herkese açık) ══════ -->
+<div id="landing-screen" style="display:none">
+  <!-- Üst bar -->
+  <header class="lnd-nav">
+    <div class="lnd-brand"><span class="lnd-logo">🔍</span> <b>TakipEt</b></div>
+    <nav class="lnd-nav-links">
+      <a href="#lnd-features" onclick="lndScroll('lnd-features');return false">Özellikler</a>
+      <a href="#lnd-pricing" onclick="lndScroll('lnd-pricing');return false">Fiyatlar</a>
+      <a href="#lnd-contact" onclick="lndScroll('lnd-contact');return false">İletişim</a>
+      <button class="btn btn-secondary btn-sm" onclick="showLogin()">Giriş Yap</button>
+    </nav>
+  </header>
+
+  <!-- Hero -->
+  <section class="lnd-hero">
+    <div class="lnd-hero-in">
+      <div class="lnd-badge">🏨 Oteller · Fabrikalar · AVM'ler için</div>
+      <h1 id="lnd-hero-title">Ekipman denetimini<br/><span>tek yerden</span> yönetin</h1>
+      <p id="lnd-hero-sub">Yangın tüpü, jeneratör, kazan… tüm ekipmanlarınızın denetimini QR ile yapın, raporlayın, hatırlatma alın. Kağıt yok, karmaşa yok.</p>
+      <div class="lnd-hero-btns">
+        <button class="btn btn-primary" onclick="lndScroll('lnd-pricing')">🚀 Ücretsiz Başla</button>
+        <button class="btn btn-secondary" onclick="showLogin()">Giriş Yap →</button>
+      </div>
+      <div class="lnd-hero-note">Kredi kartı gerekmez · Dakikalar içinde kurulum</div>
+    </div>
+  </section>
+
+  <!-- Özellikler -->
+  <section id="lnd-features" class="lnd-sec">
+    <h2 class="lnd-sec-title">Neden TakipEt?</h2>
+    <div class="lnd-grid" id="lnd-feature-grid"></div>
+  </section>
+
+  <!-- Fiyatlandırma -->
+  <section id="lnd-pricing" class="lnd-sec lnd-sec-alt">
+    <h2 class="lnd-sec-title">Size uygun planı seçin</h2>
+    <p class="lnd-sec-sub">İstediğiniz zaman yükseltin veya iptal edin.</p>
+    <div class="lnd-plans" id="lnd-plans"></div>
+  </section>
+
+  <!-- İletişim -->
+  <section id="lnd-contact" class="lnd-sec">
+    <h2 class="lnd-sec-title">İletişim</h2>
+    <p class="lnd-sec-sub" id="lnd-contact-sub">Sorularınız mı var? Size yardımcı olalım.</p>
+    <div class="lnd-contact-box" id="lnd-contact-box"></div>
+  </section>
+
+  <footer class="lnd-footer">
+    <div>🔍 <b>TakipEt</b> — Ekipman Denetim Sistemi</div>
+    <div class="lnd-footer-sub">© 2026 · Tüm hakları saklıdır</div>
+  </footer>
+</div>
+
 <!-- GİRİŞ -->
 <div id="login-screen" class="login-screen" style="display:none">
   <div class="login-card">
+    <button class="lnd-back-link" onclick="showLanding()">← Anasayfa</button>
     <div class="login-logo-big"><span class="logo-glass-big">🔍</span></div>
     <h1 class="login-title"><strong>TakipEt</strong><br/><span>Denetim Sistemi</span></h1>
     <div class="form-group" style="margin-top:24px">
@@ -5902,9 +6050,12 @@ async function initApp(){
     }
   }
 
-  // Login ekranı
-  document.getElementById('login-screen').style.display='flex';
+  // Oturum yok: QR deep-link varsa GİRİŞ ekranı, yoksa ANASAYFA (landing)
   renderLoginContact();
+  let urlHasQR=false;
+  try{ urlHasQR = /[?&]q=/.test(location.search) || !!sessionStorage.getItem('te_pendingQR'); }catch(e){}
+  if(urlHasQR){ showLogin(); }
+  else { try{ showLanding(); }catch(e){ document.getElementById('login-screen').style.display='flex'; } }
   checkQRDeepLink();
 }
 
@@ -11651,6 +11802,120 @@ function setupPullToRefresh(){
 
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start);
 else start();
+/* ══════════════════════════════════════
+   ANASAYFA (LANDING) — Faz 3 / Parça 1
+   Herkese açık tanıtım sayfası. İçerik varsayılan sabitlerden gelir;
+   süper admin ileride S.landingConfig ile kodsuz düzenleyecek. */
+
+const DEFAULT_LANDING = {
+  heroTitle: 'Ekipman denetimini<br/><span>tek yerden</span> yönetin',
+  heroSub: 'Yangın tüpü, jeneratör, kazan… tüm ekipmanlarınızın denetimini QR ile yapın, raporlayın, hatırlatma alın. Kağıt yok, karmaşa yok.',
+  features: [
+    { icon:'📱', title:'QR ile Denetim', desc:'Her ekipmana QR yapıştırın; okutun, denetimi anında açın. Saha personeli için pratik.' },
+    { icon:'🔔', title:'Otomatik Hatırlatma', desc:'Denetim zamanı gelen ekipmanlar için uyarı alın. Hiçbir periyodik kontrolü kaçırmayın.' },
+    { icon:'📊', title:'Raporlama & Analiz', desc:'Uygunluk oranları, arıza geçmişi, mahal bazlı risk analizi ve PDF çıktılar.' },
+    { icon:'🏢', title:'Çoklu Şirket', desc:'Grup şirketleri için tek panelden tüm şirketleri yönetin, aralarında geçiş yapın.' },
+    { icon:'📁', title:'Belge Arşivi', desc:'Sertifika, form, sözleşme… her belgeyi ekipmana bağlayın, klasörleyin, arayın.' },
+    { icon:'🗂️', title:'İş Emri Takibi', desc:'Görev atayın, tamamlanınca onaylayın, revize isteyin. Tüm iş akışı kayıt altında.' },
+  ],
+  plans: [
+    { id:'tekil', name:'Tekil Şirket', desc:'Tek işletme için ideal başlangıç.', price:'₺499', period:'/ay', old:'', featured:false,
+      features:['1 şirket','10 kullanıcıya kadar','Sınırsız ekipman & denetim','Belge arşivi + iş emri','E-posta destek'], cta:'Başla' },
+    { id:'grup', name:'Grup Şirket', desc:'Birden fazla işletmesi olanlar için.', price:'₺1.299', period:'/ay', old:'₺1.799', featured:true,
+      features:['Sınırsız şirket','Sınırsız kullanıcı','Tüm Tekil özellikleri','Şirketler arası panel + karşılaştırma','Öncelikli destek'], cta:'Başla' },
+    { id:'kurumsal', name:'Kurumsal', desc:'Özel ihtiyaçlar & entegrasyon.', price:'Teklif', period:'', old:'', featured:false,
+      features:['Grup planının tümü','Özel eğitim & kurulum','Özel entegrasyonlar','SLA & hesap yöneticisi'], cta:'İletişime Geç' },
+  ],
+  contactNote: 'Sorularınız mı var? Size yardımcı olalım.',
+};
+
+function getLandingConfig(){
+  const c = (S && S.landingConfig) ? S.landingConfig : {};
+  return {
+    heroTitle: c.heroTitle || DEFAULT_LANDING.heroTitle,
+    heroSub:   c.heroSub   || DEFAULT_LANDING.heroSub,
+    features:  (Array.isArray(c.features) && c.features.length) ? c.features : DEFAULT_LANDING.features,
+    plans:     (Array.isArray(c.plans) && c.plans.length) ? c.plans : DEFAULT_LANDING.plans,
+    contactNote: c.contactNote || DEFAULT_LANDING.contactNote,
+  };
+}
+
+/* Ekran geçişleri */
+function showLanding(){
+  try{ document.getElementById('login-screen').style.display='none'; }catch(e){}
+  try{ document.getElementById('app').style.display='none'; }catch(e){}
+  try{ document.getElementById('companies-screen').style.display='none'; }catch(e){}
+  const l=document.getElementById('landing-screen'); if(l) l.style.display='block';
+  renderLanding();
+  window.scrollTo(0,0);
+}
+function showLogin(){
+  const l=document.getElementById('landing-screen'); if(l) l.style.display='none';
+  const ls=document.getElementById('login-screen'); if(ls) ls.style.display='flex';
+  try{ renderLoginContact(); }catch(e){}
+  setTimeout(()=>{ const u=document.getElementById('login-user'); if(u) u.focus(); }, 60);
+}
+function lndScroll(id){
+  const el=document.getElementById(id);
+  if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function renderLanding(){
+  const cfg=getLandingConfig();
+  // Hero
+  const ht=document.getElementById('lnd-hero-title'); if(ht) ht.innerHTML=cfg.heroTitle;
+  const hs=document.getElementById('lnd-hero-sub'); if(hs) hs.textContent=cfg.heroSub;
+  // Özellikler
+  const fg=document.getElementById('lnd-feature-grid');
+  if(fg) fg.innerHTML=cfg.features.map(f=>`
+    <div class="lnd-card">
+      <div class="lnd-card-ico">${f.icon||'⭐'}</div>
+      <h3>${safe(f.title)}</h3>
+      <p>${safe(f.desc)}</p>
+    </div>`).join('');
+  // Planlar
+  const pl=document.getElementById('lnd-plans');
+  if(pl) pl.innerHTML=cfg.plans.map(p=>`
+    <div class="lnd-plan${p.featured?' featured':''}">
+      ${p.featured?'<div class="lnd-plan-tag">★ En Popüler</div>':''}
+      <h3>${safe(p.name)}</h3>
+      <div class="lnd-plan-desc">${safe(p.desc)}</div>
+      <div class="lnd-plan-price">${safe(p.price)}<small>${safe(p.period||'')}</small>${p.old?`<span class="lnd-plan-old">${safe(p.old)}</span>`:''}</div>
+      <ul>${(p.features||[]).map(x=>`<li>${safe(x)}</li>`).join('')}</ul>
+      <button class="btn ${p.featured?'btn-primary':'btn-secondary'}" onclick="startSignup('${p.id}')">${safe(p.cta||'Seç')}</button>
+    </div>`).join('');
+  // İletişim
+  const cs=document.getElementById('lnd-contact-sub'); if(cs) cs.textContent=cfg.contactNote;
+  const cb=document.getElementById('lnd-contact-box');
+  if(cb){
+    const ci=S.contactInfo||{};
+    const tel=(ci.tel||'').trim(), mail=(ci.mail||CONTACT_EMAIL||'').trim();
+    let h='';
+    if(tel)  h+=`<a class="lnd-contact-row" href="tel:${safe(tel)}">📞 <span>${safe(tel)}</span></a>`;
+    if(mail) h+=`<a class="lnd-contact-row" href="mailto:${safe(mail)}?subject=TakipEt%20Bilgi%20Talebi">✉️ <span>${safe(mail)}</span></a>`;
+    h+=`<button class="lnd-contact-row" style="cursor:pointer;text-align:left;width:100%" onclick="showLogin()">🔑 <span>Zaten üye misiniz? Giriş yapın</span></button>`;
+    cb.innerHTML=h;
+  }
+}
+
+/* Plan seçimi — Parça 2'de gerçek kayıt akışına bağlanacak.
+   Şimdilik kullanıcıyı bilgilendirir (sistem bozulmadan). */
+function startSignup(planId){
+  const cfg=getLandingConfig();
+  const plan=(cfg.plans||[]).find(p=>p.id===planId);
+  if(planId==='kurumsal'){ lndScroll('lnd-contact'); return; }
+  const mail=(S.contactInfo?.mail||CONTACT_EMAIL||'').trim();
+  const body=`<div style="padding:6px 2px">
+    <div style="text-align:center;font-size:40px;margin-bottom:8px">🎉</div>
+    <p style="font-size:15px;font-weight:700;color:var(--txt);text-align:center;margin-bottom:8px">${plan?safe(plan.name)+' planı':'Üyelik'} — çok yakında!</p>
+    <p style="font-size:13.5px;color:var(--txt2);line-height:1.6;text-align:center;margin-bottom:18px">
+      Online üye olma sistemi hazırlanıyor. Hemen başlamak isterseniz bizimle iletişime geçin, hesabınızı biz açalım.</p>
+    ${mail?`<a class="btn btn-primary btn-full" style="text-decoration:none;margin-bottom:8px" href="mailto:${safe(mail)}?subject=${encodeURIComponent('TakipEt '+(plan?plan.name:'')+' Üyelik Talebi')}">✉️ Üyelik İçin Yaz</a>`:''}
+    <button class="btn btn-secondary btn-full" onclick="closeModal('gmodal');showLogin()">Zaten üyeyim, giriş yap</button>
+  </div>`;
+  const gb=document.getElementById('gmodal-body');
+  if(gb){ document.getElementById('gmodal-title').textContent='Üyelik'; gb.innerHTML=body; openModal('gmodal'); }
+}
 
 </script>
 </body>

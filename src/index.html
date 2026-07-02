@@ -15,9 +15,63 @@
   <button id="btn-retry-conn" style="padding:12px 28px;background:#ef4444;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer">↺ Tekrar Dene</button>
 </div>
 
+<!-- ══════ ANASAYFA (LANDING — herkese açık) ══════ -->
+<div id="landing-screen" style="display:none">
+  <!-- Üst bar -->
+  <header class="lnd-nav">
+    <div class="lnd-brand"><span class="lnd-logo">🔍</span> <b>TakipEt</b></div>
+    <nav class="lnd-nav-links">
+      <a href="#lnd-features" onclick="lndScroll('lnd-features');return false">Özellikler</a>
+      <a href="#lnd-pricing" onclick="lndScroll('lnd-pricing');return false">Fiyatlar</a>
+      <a href="#lnd-contact" onclick="lndScroll('lnd-contact');return false">İletişim</a>
+      <button class="btn btn-secondary btn-sm" onclick="showLogin()">Giriş Yap</button>
+    </nav>
+  </header>
+
+  <!-- Hero -->
+  <section class="lnd-hero">
+    <div class="lnd-hero-in">
+      <div class="lnd-badge">🏨 Oteller · Fabrikalar · AVM'ler için</div>
+      <h1 id="lnd-hero-title">Ekipman denetimini<br/><span>tek yerden</span> yönetin</h1>
+      <p id="lnd-hero-sub">Yangın tüpü, jeneratör, kazan… tüm ekipmanlarınızın denetimini QR ile yapın, raporlayın, hatırlatma alın. Kağıt yok, karmaşa yok.</p>
+      <div class="lnd-hero-btns">
+        <button class="btn btn-primary" onclick="lndScroll('lnd-pricing')">🚀 Ücretsiz Başla</button>
+        <button class="btn btn-secondary" onclick="showLogin()">Giriş Yap →</button>
+      </div>
+      <div class="lnd-hero-note">Kredi kartı gerekmez · Dakikalar içinde kurulum</div>
+    </div>
+  </section>
+
+  <!-- Özellikler -->
+  <section id="lnd-features" class="lnd-sec">
+    <h2 class="lnd-sec-title">Neden TakipEt?</h2>
+    <div class="lnd-grid" id="lnd-feature-grid"></div>
+  </section>
+
+  <!-- Fiyatlandırma -->
+  <section id="lnd-pricing" class="lnd-sec lnd-sec-alt">
+    <h2 class="lnd-sec-title">Size uygun planı seçin</h2>
+    <p class="lnd-sec-sub">İstediğiniz zaman yükseltin veya iptal edin.</p>
+    <div class="lnd-plans" id="lnd-plans"></div>
+  </section>
+
+  <!-- İletişim -->
+  <section id="lnd-contact" class="lnd-sec">
+    <h2 class="lnd-sec-title">İletişim</h2>
+    <p class="lnd-sec-sub" id="lnd-contact-sub">Sorularınız mı var? Size yardımcı olalım.</p>
+    <div class="lnd-contact-box" id="lnd-contact-box"></div>
+  </section>
+
+  <footer class="lnd-footer">
+    <div>🔍 <b>TakipEt</b> — Ekipman Denetim Sistemi</div>
+    <div class="lnd-footer-sub">© 2026 · Tüm hakları saklıdır</div>
+  </footer>
+</div>
+
 <!-- GİRİŞ -->
 <div id="login-screen" class="login-screen" style="display:none">
   <div class="login-card">
+    <button class="lnd-back-link" onclick="showLanding()">← Anasayfa</button>
     <div class="login-logo-big"><span class="logo-glass-big">🔍</span></div>
     <h1 class="login-title"><strong>TakipEt</strong><br/><span>Denetim Sistemi</span></h1>
     <div class="form-group" style="margin-top:24px">
