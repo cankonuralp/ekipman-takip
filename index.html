@@ -4020,7 +4020,8 @@ function renderDocSearchResults(q, canManage){
   const rows=[];
   (S.mahals||[]).forEach(m=>{
     (S.equips||[]).filter(e=>e.mahalId===m.id).forEach(e=>{
-      (e.documents||[]).forEach(d=>{ if((d.name||'').toLowerCase().includes(q)) rows.push({d, loc:m.name+' › '+e.name, manual:false}); });
+      const loc=m.name+(e.cluster?(' › '+e.cluster):'')+' › '+e.name;
+      (e.documents||[]).forEach(d=>{ if((d.name||'').toLowerCase().includes(q)) rows.push({d, loc, manual:false}); });
     });
   });
   (S.companyFolders||[]).forEach(f=>{
@@ -4038,18 +4039,30 @@ function renderDocSearchResults(q, canManage){
 }
 
 /* Belge ağacını kur: otomatik (mahal>ekipman) + manuel klasörler */
+let _autoClusterReg={}; // küme düğümü id → {mahalId, name} (onclick'e küme adı gömmemek için)
 function buildCompanyDocTree(){
   const nodes=[];
+  _autoClusterReg={};
   // Otomatik: her mahal → ekipmanları → belgeleri
   (S.mahals||[]).forEach(m=>{
     const equipsWithDocs=(S.equips||[]).filter(e=>e.mahalId===m.id && (e.documents||[]).length>0);
     if(!equipsWithDocs.length) return;
     const mahalNode={ id:'auto_m_'+m.id, name:m.name, icon:'🏢', auto:true, mahalId:m.id, children:[], open:_docTreeOpen['auto_m_'+m.id] };
-    equipsWithDocs.forEach(e=>{
-      const catName=(catById(e.cat)||{}).name||'Diğer';
-      const eqNode={ id:'auto_e_'+e.id, name:e.name+' · '+catName, icon:'🔧', auto:true, equipId:e.id, docs:(e.documents||[]).map(d=>({...d, _equipId:e.id})), open:_docTreeOpen['auto_e_'+e.id] };
-      mahalNode.children.push(eqNode);
+    const mkEqNode=e=>({ id:'auto_e_'+e.id, name:e.name, icon:'🔧', auto:true, equipId:e.id, docs:(e.documents||[]).map(d=>({...d, _equipId:e.id})), open:_docTreeOpen['auto_e_'+e.id] });
+    // Küme klasörleri (varsa): Mahal → Küme → Ekipman → belgeler
+    const cmap={};
+    equipsWithDocs.filter(e=>e.cluster).forEach(e=>{
+      const cname=e.cluster;
+      if(!cmap[cname]){
+        const cid='auto_c_'+m.id+'_'+String(cname).replace(/[^a-zA-Z0-9ğüşöçıİĞÜŞÖÇ_-]/g,'_');
+        cmap[cname]={ id:cid, name:cname, icon:'🗂️', auto:true, clusterKey:cid, children:[], open:_docTreeOpen[cid] };
+        _autoClusterReg[cid]={ mahalId:m.id, name:cname };
+        mahalNode.children.push(cmap[cname]);
+      }
+      cmap[cname].children.push(mkEqNode(e));
     });
+    // Kümesiz ekipmanlar direkt mahal klasörünün altına
+    equipsWithDocs.filter(e=>!e.cluster).forEach(e=>{ mahalNode.children.push(mkEqNode(e)); });
     nodes.push(mahalNode);
   });
   // Manuel klasörler (iç içe / alt klasör destekli — parentId ile)
@@ -4083,6 +4096,7 @@ function renderDocNode(node, depth){
         <button class="doc-mini-btn" onclick="event.stopPropagation();uploadToCompanyFolder('${node.folderId}')" title="Belge Yükle" style="font-size:13px">⬆️</button>
         <button class="doc-mini-btn" onclick="event.stopPropagation();deleteCompanyFolder('${node.folderId}')" title="Sil" style="font-size:13px">🗑️</button>`:''}
         ${(node.auto&&node.equipId&&canManage)?`<button class="doc-mini-btn" onclick="event.stopPropagation();deleteAutoEquipDocs('${node.equipId}')" title="Bu ekipmanın tüm belgelerini sil" style="font-size:13px">🗑️</button>`:''}
+        ${(node.auto&&node.clusterKey&&canManage)?`<button class="doc-mini-btn" onclick="event.stopPropagation();deleteAutoClusterDocs('${node.clusterKey}')" title="Bu kümedeki tüm ekipman belgelerini sil" style="font-size:13px">🗑️</button>`:''}
         ${(node.auto&&node.mahalId&&canManage)?`<button class="doc-mini-btn" onclick="event.stopPropagation();deleteAutoMahalDocs('${node.mahalId}')" title="Bu mahaldeki tüm ekipman belgelerini sil" style="font-size:13px">🗑️</button>`:''}
       </div>`;
   if(open){
@@ -4133,6 +4147,21 @@ async function deleteAutoEquipDocs(equipId){
   for(const d of docs){ await trashDoc(d, 'Ekipman: '+(e.name||'')); }
   e.documents=[];
   try{ await save(); renderCompanyDocs(); toast(`🗑️ ${docs.length} belge silindi`); }catch(err){ toast('❌ '+err.message,5000); }
+}
+
+/* Bir kümedeki TÜM ekipman belgelerini sil (küme ve ekipmanlar SİLİNMEZ) */
+async function deleteAutoClusterDocs(clusterKey){
+  if(!canDo('manage_docs')){ toast('🚫 Belge yönetim yetkiniz yok'); return; }
+  const reg=_autoClusterReg[clusterKey]; if(!reg) return;
+  const eqs=(S.equips||[]).filter(e=>e.mahalId===reg.mahalId && e.cluster===reg.name && (e.documents||[]).length>0);
+  const total=eqs.reduce((n,e)=>n+(e.documents||[]).length,0);
+  if(!total){ toast('Bu kümede belge yok'); return; }
+  if(!await confirmDialog({title:'Küme Belgelerini Sil',message:`"${safe(reg.name)}" kümesindeki ${eqs.length} ekipmana ait ${total} belge silinecek (küme ve ekipmanlar SİLİNMEZ; belgeler 30 gün çöpte geri alınabilir).`,danger:true,okText:'Sil'})) return;
+  for(const e of eqs){
+    for(const d of (e.documents||[])){ await trashDoc(d, 'Ekipman: '+(e.name||'')); }
+    e.documents=[];
+  }
+  try{ await save(); renderCompanyDocs(); toast(`🗑️ ${total} belge silindi`); }catch(err){ toast('❌ '+err.message,5000); }
 }
 
 /* Bir mahaldeki TÜM ekipman belgelerini sil (mahal ve ekipmanlar SİLİNMEZ) */
