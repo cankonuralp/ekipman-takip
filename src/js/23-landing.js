@@ -4,7 +4,7 @@
    süper admin ileride S.landingConfig ile kodsuz düzenleyecek. */
 
 const DEFAULT_LANDING = {
-  heroTitle: 'Ekipman denetimini<br/><span>tek yerden</span> yönetin',
+  heroTitle: 'İşletmenizin teknik yönetimini<br/><span>tek yerden</span> yapın',
   heroSub: 'Yangın tüpü, jeneratör, kazan… tüm ekipmanlarınızın denetimini QR ile yapın, raporlayın, hatırlatma alın. Kağıt yok, karmaşa yok.',
   features: [
     { icon:'📱', title:'QR ile Denetim', desc:'Her ekipmana QR yapıştırın; okutun, denetimi anında açın. Saha personeli için pratik.' },
@@ -15,9 +15,9 @@ const DEFAULT_LANDING = {
     { icon:'🗂️', title:'İş Emri Takibi', desc:'Görev atayın, tamamlanınca onaylayın, revize isteyin. Tüm iş akışı kayıt altında.' },
   ],
   plans: [
-    { id:'tekil', name:'Tekil Şirket', desc:'Tek işletme için ideal başlangıç.', price:'₺499', period:'/ay', old:'', featured:false,
+    { id:'tekil', name:'Tekil Şirket', desc:'Tek işletme için ideal başlangıç.', price:'—', period:'', old:'', featured:false,
       features:['1 şirket','10 kullanıcıya kadar','Sınırsız ekipman & denetim','Belge arşivi + iş emri','E-posta destek'], cta:'Başla' },
-    { id:'grup', name:'Grup Şirket', desc:'Birden fazla işletmesi olanlar için.', price:'₺1.299', period:'/ay', old:'₺1.799', featured:true,
+    { id:'grup', name:'Grup Şirket', desc:'Birden fazla işletmesi olanlar için.', price:'—', period:'', old:'', featured:true,
       features:['Sınırsız şirket','Sınırsız kullanıcı','Tüm Tekil özellikleri','Şirketler arası panel + karşılaştırma','Öncelikli destek'], cta:'Başla' },
     { id:'kurumsal', name:'Kurumsal', desc:'Özel ihtiyaçlar & entegrasyon.', price:'Teklif', period:'', old:'', featured:false,
       features:['Grup planının tümü','Özel eğitim & kurulum','Özel entegrasyonlar','SLA & hesap yöneticisi'], cta:'İletişime Geç' },
