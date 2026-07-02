@@ -102,6 +102,24 @@ async function initFirebase(){
   }
 }
 
+/* GEÇİCİ TEŞHİS — giriş sonrası tarayıcı kimliğinin custom-token claim'lerini
+   (cid/isSuper) güvenli bir yere yazar. Rules kilitlenmeden önce doğrulama içindir;
+   doğrulanınca kaldırılacak. */
+async function writeAuthDiag(){
+  try{
+    const a=firebase.auth(firebase.app('takipet'));
+    const u=a.currentUser; if(!u || !_db) return;
+    const t=await u.getIdTokenResult(true);
+    await _db.ref(`${TENANT_ROOT}/_authdiag/${u.uid}`).set({
+      cid: t.claims.cid||null,
+      isSuper: t.claims.isSuper||false,
+      anon: !!u.isAnonymous,
+      username: S.cur?.username||'—',
+      at: (typeof nowStr==='function'?nowStr():''), ts: Date.now()
+    });
+  }catch(e){ console.warn('authdiag:', e.message); }
+}
+
 /* ── AKTİF ŞİRKETİN VERİSİNE BAĞLAN ──
    Süper admin bir şirket seçince VEYA normal kullanıcı giriş yapınca çağrılır.
    _ref'i o şirketin köküne kurar, listener'ı bağlar. */
