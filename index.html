@@ -1133,6 +1133,7 @@ code{background:var(--bg2);border-radius:var(--r4);padding:1px 6px;font-size:12p
       <button class="btn btn-secondary btn-sm" style="flex:1" onclick="openSuperLogs()">📋 Sistem Logları</button>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="openGlobalDashboard()">📊 Global Özet</button>
       <button class="btn btn-secondary btn-sm" style="flex:1" onclick="openErrorLogs()">🔴 Hata Kayıtları</button>
     </div>
     <!-- Genel Evraklar (belge ağacı) -->
@@ -3150,6 +3151,9 @@ async function bindCompanyData(companyId){
     toast('❌ Firebase hatası: '+err.message, 5000);
   });
 
+  // Şirket bazlı günlük otomatik yedek (o gün ilk giren kullanıcı tetikler)
+  setTimeout(()=>autoBackupCompanyIfNeeded(companyId), 5000);
+
   // Bu şirkette süper admin değilse, kullanıcılar şirkete özel. Süper admin için ayrı.
   return true;
 }
@@ -3384,20 +3388,64 @@ async function loadCompanyStats(){
         let storageBytes=0;
         (toArr(d.equips||[])).forEach(e=>{ (e.documents||[]).forEach(doc=>{ storageBytes+=(doc.size||0); }); });
         (toArr(d.companyFolders||[])).forEach(f=>{ (f.docs||[]).forEach(doc=>{ storageBytes+=(doc.size||0); }); });
+        // Global karşılaştırma için: uygunsuz rapor sayısı, son 30 gün denetim, açık iş emri
+        const reps=toArr(d.reports||[]);
+        const cutoff30=Date.now()-30*86400000;
+        const failReports=reps.filter(r=>r&&r.result==='fail').length;
+        const recent30=reps.filter(r=>{ const t=r&&r.createdAt?Date.parse(r.createdAt):0; return t&&t>=cutoff30; }).length;
+        const openWo=(toArr(d.workOrders||[])).filter(w=>w&&w.status!=='approved').length;
         _companyStats[c.id]={
           bytes, storageBytes,
           equips:(toArr(d.equips||[])).length,
-          reports:(toArr(d.reports||[])).length,
+          reports:reps.length,
           mahals:(toArr(d.mahals||[])).length,
-          users:(toArr(d.users||[])).length
+          users:(toArr(d.users||[])).length,
+          failReports, recent30, openWo
         };
       } else {
-        _companyStats[c.id]={bytes:0,storageBytes:0,equips:0,reports:0,mahals:0,users:0};
+        _companyStats[c.id]={bytes:0,storageBytes:0,equips:0,reports:0,mahals:0,users:0,failReports:0,recent30:0,openWo:0};
       }
-    }catch(e){ _companyStats[c.id]={bytes:0,equips:0,reports:0,mahals:0,users:0}; }
+    }catch(e){ _companyStats[c.id]={bytes:0,equips:0,reports:0,mahals:0,users:0,failReports:0,recent30:0,openWo:0}; }
   }
   // Yeniden render et (boyutlar geldi)
   renderCompaniesScreen(true);
+}
+
+/* ── GLOBAL DASHBOARD (süper admin): şirket karşılaştırma ── */
+function openGlobalDashboard(){
+  const body=document.getElementById('gmodal-body');
+  document.getElementById('gmodal-title').textContent='📊 Global Özet — Şirket Karşılaştırma';
+  const rows=S.companies.map(c=>{
+    const s=_companyStats[c.id]||{};
+    const failRate=(s.reports||0)?Math.round((s.failReports||0)/s.reports*100):0;
+    return { c, s, failRate };
+  }).sort((a,b)=>(b.failRate-a.failRate) || ((b.s.openWo||0)-(a.s.openWo||0)));
+  const tot=rows.reduce((acc,r)=>({eq:acc.eq+(r.s.equips||0), rep:acc.rep+(r.s.reports||0), fail:acc.fail+(r.s.failReports||0), r30:acc.r30+(r.s.recent30||0), wo:acc.wo+(r.s.openWo||0)}),{eq:0,rep:0,fail:0,r30:0,wo:0});
+  const totRate=tot.rep?Math.round(tot.fail/tot.rep*100):0;
+  body.innerHTML=`
+    <div class="hstat-grid" style="margin-bottom:14px">
+      <div class="hstat-card"><div class="hstat-icon">🏢</div><div class="hstat-num">${S.companies.length}</div><div class="hstat-lbl">Şirket</div></div>
+      <div class="hstat-card"><div class="hstat-icon">🔧</div><div class="hstat-num">${tot.eq}</div><div class="hstat-lbl">Ekipman</div></div>
+      <div class="hstat-card"><div class="hstat-icon">📋</div><div class="hstat-num">${tot.r30}</div><div class="hstat-lbl">Denetim (30g)</div></div>
+      <div class="hstat-card ${totRate>10?'fail':'ok'}"><div class="hstat-icon">${totRate>10?'⚠️':'✅'}</div><div class="hstat-num">%${totRate}</div><div class="hstat-lbl">Uygunsuzluk</div></div>
+      <div class="hstat-card"><div class="hstat-icon">🗂️</div><div class="hstat-num">${tot.wo}</div><div class="hstat-lbl">Açık İş Emri</div></div>
+      <div class="hstat-card"><div class="hstat-icon">📑</div><div class="hstat-num">${tot.rep}</div><div class="hstat-lbl">Toplam Rapor</div></div>
+    </div>
+    <p class="sec-label" style="margin-bottom:8px">Şirketler (uygunsuzluk oranına göre)</p>
+    <div style="display:flex;flex-direction:column;gap:6px;max-height:48vh;overflow-y:auto">
+      ${rows.length?rows.map(({c,s,failRate})=>`
+        <div style="border:1px solid var(--brd);border-radius:10px;padding:10px 12px;cursor:pointer" onclick="closeModal('gmodal');enterCompany('${c.id}')">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+            <span style="font-size:13px;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">🏢 ${safe(c.name)}</span>
+            <span style="font-size:11px;font-weight:700;color:${failRate>10?'var(--rtxt)':'var(--gtxt)'};white-space:nowrap">%${failRate} uygunsuz</span>
+          </div>
+          <div style="height:7px;background:var(--bg);border-radius:5px;overflow:hidden;margin-bottom:6px">
+            <div style="height:100%;width:${Math.max(failRate,2)}%;background:${failRate>10?'linear-gradient(90deg,#f59e0b,#ef4444)':'linear-gradient(90deg,#22c55e,#16a34a)'}"></div>
+          </div>
+          <div style="font-size:11px;color:var(--txt3)">${s.equips||0} ekipman · ${s.recent30||0} denetim (30g) · ${s.openWo||0} açık iş emri · ${s.users||0} üye</div>
+        </div>`).join(''):'<div style="padding:16px;text-align:center;color:var(--txt3);font-size:12.5px">Şirket yok.</div>'}
+    </div>`;
+  openModal('gmodal');
 }
 
 function renderCompaniesScreen(skipReload){
@@ -4074,17 +4122,32 @@ async function moveSelectedDocs(){
   try{ await save(); renderCompanyDocs(); toast(`✅ ${moved} belge taşındı: ${to.name}`); }
   catch(e){ toast('❌ '+e.message,5000); }
 }
+/* ── ÇÖP KUTUSU: silinen belgeler Storage'dan HEMEN silinmez ──
+   Kayıt takipet/trash altına düşer, TRASH_DAYS gün sonra otomatik temizlenir.
+   Böylece yanlış silinen dosya süper adminden geri alınabilir. */
+const TRASH_DAYS=30;
+async function trashDoc(d, origin, cidOverride){
+  if(!d||!d.path||!_db) return;
+  try{
+    await _db.ref(`${TENANT_ROOT}/trash`).push({
+      name:d.name||'—', type:d.type||'', path:d.path, url:d.url||'', size:d.size||0,
+      cid:cidOverride||S.activeCompanyId||'_global', origin:origin||'',
+      deletedAt:nowStr(), ts:Date.now(), by:S.cur?.fullname||S.cur?.username||'—'
+    });
+  }catch(e){ console.warn('trash:', e.message); }
+}
+
 /* Seçili belgeleri toplu sil */
 async function deleteSelectedDocs(){
   if(!canDo('manage_docs')) return;
   if(!_docSelected.size){ toast('⚠️ Belge seçin'); return; }
-  if(!await confirmDialog({title:'Belgeleri Sil',message:`${_docSelected.size} belge silinecek.`,danger:true,okText:'Sil'})) return;
+  if(!await confirmDialog({title:'Belgeleri Sil',message:`${_docSelected.size} belge silinecek (30 gün çöp kutusunda geri alınabilir).`,danger:true,okText:'Sil'})) return;
   let del=0;
   for(const k of Array.from(_docSelected)){
     const [fid,docId]=k.split('::');
     const from=(S.companyFolders||[]).find(x=>x.id===fid); if(!from) continue;
     const doc=(from.docs||[]).find(d=>d.id===docId); if(!doc) continue;
-    try{ if(doc.path) await _storage.ref(doc.path).delete(); }catch(e){}
+    await trashDoc(doc, 'Toplu silme');
     from.docs=from.docs.filter(d=>d.id!==docId); del++;
   }
   _docSelected.clear(); _docSelectMode=false;
@@ -4113,8 +4176,8 @@ async function deleteCompanyFolder(fid){
   const bucket=(S.companyFolders||[]).filter(x=>toDelete.includes(x.id));
   const docCount=bucket.reduce((n,x)=>n+(x.docs||[]).length,0);
   const subCount=toDelete.length-1;
-  if(!await confirmDialog({title:'Klasörü Sil',message:`"${safe(f.name)}"${subCount?` ve ${subCount} alt klasör`:''} + içindeki ${docCount} belge silinecek.`,danger:true,okText:'Sil'})) return;
-  for(const x of bucket){ for(const d of (x.docs||[])){ try{ if(d.path) await _storage.ref(d.path).delete(); }catch(e){} } }
+  if(!await confirmDialog({title:'Klasörü Sil',message:`"${safe(f.name)}"${subCount?` ve ${subCount} alt klasör`:''} + içindeki ${docCount} belge silinecek (belgeler 30 gün çöpte geri alınabilir).`,danger:true,okText:'Sil'})) return;
+  for(const x of bucket){ for(const d of (x.docs||[])){ await trashDoc(d, 'Klasör: '+(x.name||'')); } }
   S.companyFolders=S.companyFolders.filter(x=>!toDelete.includes(x.id));
   try{ await save(); renderCompanyDocs(); toast('🗑️ Silindi'); }catch(e){ toast('❌ '+e.message); }
 }
@@ -4196,8 +4259,8 @@ async function onCompanyDocSelected(ev){
 async function deleteCompanyDoc(fid, docId){
   const f=(S.companyFolders||[]).find(x=>x.id===fid); if(!f) return;
   const d=(f.docs||[]).find(x=>x.id===docId); if(!d) return;
-  if(!await confirmDialog({title:'Belgeyi Sil',message:`"${safe(d.name)}" silinecek.`,danger:true,okText:'Sil'})) return;
-  try{ if(d.path) await _storage.ref(d.path).delete(); }catch(e){}
+  if(!await confirmDialog({title:'Belgeyi Sil',message:`"${safe(d.name)}" silinecek (30 gün çöpte geri alınabilir).`,danger:true,okText:'Sil'})) return;
+  await trashDoc(d, 'Klasör: '+(f.name||''));
   f.docs=f.docs.filter(x=>x.id!==docId);
   try{ await save(); renderCompanyDocs(); toast('🗑️ Silindi'); }catch(e){ toast('❌ '+e.message); }
 }
@@ -4394,8 +4457,8 @@ async function deleteGlobalFolder(fid){
   const bucket=(_globalDocs.folders||[]).filter(x=>toDelete.includes(x.id));
   const docCount=bucket.reduce((n,x)=>n+(x.docs||[]).length,0);
   const subCount=toDelete.length-1;
-  if(!await confirmDialog({title:'Klasörü Sil',message:`"${safe(f.name)}"${subCount?` ve ${subCount} alt klasör`:''} + içindeki ${docCount} belge silinecek.`,danger:true,okText:'Sil'})) return;
-  for(const x of bucket){ for(const d of (x.docs||[])){ try{ if(d.path) await _storage.ref(d.path).delete(); }catch(e){} } }
+  if(!await confirmDialog({title:'Klasörü Sil',message:`"${safe(f.name)}"${subCount?` ve ${subCount} alt klasör`:''} + içindeki ${docCount} belge silinecek (belgeler 30 gün çöpte geri alınabilir).`,danger:true,okText:'Sil'})) return;
+  for(const x of bucket){ for(const d of (x.docs||[])){ await trashDoc(d, 'Genel Evrak: '+(x.name||''), '_global'); } }
   _globalDocs.folders=_globalDocs.folders.filter(x=>!toDelete.includes(x.id));
   try{ await saveGlobalDocs(); renderGlobalDocs(); toast('🗑️ Klasör silindi'); }
   catch(e){ toast('❌ '+e.message,5000); }
@@ -4439,8 +4502,8 @@ async function deleteGlobalDoc(fid, docId){
   if(!f) return;
   const d=(f.docs||[]).find(x=>x.id===docId);
   if(!d) return;
-  if(!await confirmDialog({title:'Belgeyi Sil',message:`"${safe(d.name)}" silinecek.`,danger:true,okText:'Sil'})) return;
-  try{ if(d.path) await _storage.ref(d.path).delete(); }catch(e){}
+  if(!await confirmDialog({title:'Belgeyi Sil',message:`"${safe(d.name)}" silinecek (30 gün çöpte geri alınabilir).`,danger:true,okText:'Sil'})) return;
+  await trashDoc(d, 'Genel Evrak: '+(f.name||''), '_global');
   f.docs=f.docs.filter(x=>x.id!==docId);
   try{ await saveGlobalDocs(); renderGlobalDocs(); toast('🗑️ Belge silindi'); }
   catch(e){ toast('❌ '+e.message,5000); }
@@ -4649,6 +4712,120 @@ async function autoBackupIfNeeded(){
   }catch(e){}
 }
 
+/* Şirket bazlı günlük otomatik yedek — HERHANGİ bir kullanıcı o gün ilk girince alınır.
+   (Süper admin girmese bile şirket verisi her gün yedeklenir.) */
+async function autoBackupCompanyIfNeeded(cid){
+  if(!_db || !S.cur || !cid) return;
+  try{
+    const todayKey=trBackupDayKey();
+    const mRef=_db.ref(`${TENANT_ROOT}/backups/_lastAutoDayCompany/${cid}`);
+    const mSnap=await mRef.once('value');
+    if(mSnap.exists() && mSnap.val()===todayKey) return;
+    await backupCompany(cid);
+    await mRef.set(todayKey);
+    console.log('[Otomatik şirket yedeği]', cid, todayKey);
+  }catch(e){}
+}
+
+/* Çöp kutusunu günde 1 kez buda: TRASH_DAYS günden eski dosyaları Storage'dan kalıcı sil */
+async function purgeTrashIfNeeded(){
+  if(!_db || !S.cur?.isSuper) return;
+  try{
+    const todayKey=trBackupDayKey();
+    const ref=_db.ref(`${TENANT_ROOT}/trash`);
+    const mSnap=await ref.child('_lastPurgeDay').once('value');
+    if(mSnap.exists() && mSnap.val()===todayKey) return;
+    const snap=await ref.once('value');
+    const cutoff=Date.now()-TRASH_DAYS*86400000;
+    const jobs=[];
+    if(snap.exists()) snap.forEach(ch=>{
+      if(String(ch.key).startsWith('_')) return;
+      const v=ch.val()||{};
+      if((v.ts||0)<cutoff) jobs.push({key:ch.key, path:v.path});
+    });
+    for(const j of jobs){
+      try{ if(j.path&&_storage) await _storage.ref(j.path).delete(); }catch(e){}
+      try{ await ref.child(j.key).remove(); }catch(e){}
+    }
+    await ref.child('_lastPurgeDay').set(todayKey);
+    if(jobs.length) console.log('[Çöp] kalıcı temizlendi:', jobs.length);
+  }catch(e){}
+}
+
+/* Çöp kutusu ekranı (süper admin): silinen belgeleri listele → geri al / kalıcı sil */
+async function openTrashBin(){
+  const body=document.getElementById('gmodal-body');
+  document.getElementById('gmodal-title').textContent='🗑️ Çöp Kutusu';
+  body.innerHTML='<div style="padding:14px;text-align:center;color:var(--txt3)">Yükleniyor…</div>';
+  openModal('gmodal');
+  const items=[];
+  try{
+    const snap=await _db.ref(`${TENANT_ROOT}/trash`).once('value');
+    if(snap.exists()) snap.forEach(ch=>{ if(!String(ch.key).startsWith('_')) items.push({key:ch.key, ...ch.val()}); });
+  }catch(e){}
+  items.sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const cname=cid=> cid==='_global' ? '🌐 Genel Evraklar' : (S.companies.find(c=>c.id===cid)?.name||cid);
+  body.innerHTML= items.length ? `
+    <p style="font-size:12px;color:var(--txt2);line-height:1.5;margin-bottom:10px">Silinen belgeler <b>${TRASH_DAYS} gün</b> burada saklanır, sonra kalıcı silinir. Geri alınan belge ilgili yerin <b>"🔁 Kurtarılanlar"</b> klasörüne gider.</p>
+    <div style="display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow-y:auto">
+    ${items.map(it=>`<div style="display:flex;align-items:center;gap:8px;border:1px solid var(--brd);border-radius:9px;padding:8px 10px">
+      <span style="font-size:15px">${it.type==='application/pdf'?'📄':'🖼️'}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12.5px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(it.name)}</div>
+        <div style="font-size:10.5px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(cname(it.cid))} · ${safe(it.origin||'')} · ${it.deletedAt||''} · ${safe(it.by||'')}</div>
+      </div>
+      <button class="doc-mini-btn" title="Geri Al" onclick="restoreTrashDoc('${it.key}')" style="font-size:14px">↩️</button>
+      <button class="doc-mini-btn" title="Kalıcı Sil" onclick="purgeTrashDoc('${it.key}')" style="font-size:13px">❌</button>
+    </div>`).join('')}
+    </div>` : '<div style="padding:18px;text-align:center;color:var(--txt3);font-size:12.5px">Çöp kutusu boş.</div>';
+}
+
+/* Çöpten geri al → ilgili yerin "🔁 Kurtarılanlar" klasörüne koy */
+async function restoreTrashDoc(key){
+  try{
+    const ref=_db.ref(`${TENANT_ROOT}/trash/${key}`);
+    const snap=await ref.once('value');
+    if(!snap.exists()){ toast('⚠️ Kayıt bulunamadı'); return; }
+    const it=snap.val();
+    const doc={ id:'cd'+Date.now()+Math.random().toString(36).slice(2,5), name:it.name, type:it.type, path:it.path, url:it.url, size:it.size||0, ts:Date.now(), restored:true };
+    if(it.cid==='_global'){
+      if(!_globalDocs.folders) _globalDocs.folders=[];
+      let f=_globalDocs.folders.find(x=>x&&x.name==='🔁 Kurtarılanlar'&&!x.parentId);
+      if(!f){ f={id:'gf'+Date.now(), name:'🔁 Kurtarılanlar', docs:[]}; _globalDocs.folders.push(f); }
+      if(!Array.isArray(f.docs)) f.docs=[];
+      f.docs.unshift(doc);
+      await saveGlobalDocs();
+      try{ renderGlobalDocs(); }catch(e){}
+    } else {
+      const fref=_db.ref(companyDataPath(it.cid)+'/companyFolders');
+      const fSnap=await fref.get();
+      let folders=fSnap.exists()?toArr(fSnap.val()):[];
+      let f=folders.find(x=>x&&x.name==='🔁 Kurtarılanlar'&&!x.parentId);
+      if(!f){ f={id:'cf'+Date.now()+Math.random().toString(36).slice(2,4), name:'🔁 Kurtarılanlar', docs:[]}; folders.push(f); }
+      if(!Array.isArray(f.docs)) f.docs=[];
+      f.docs.unshift(doc);
+      await fref.set(folders);
+    }
+    await ref.remove();
+    toast('✅ Geri alındı → 🔁 Kurtarılanlar');
+    openTrashBin();
+  }catch(e){ toast('❌ '+e.message,5000); }
+}
+
+/* Çöpten kalıcı sil (dosya Storage'dan da gider) */
+async function purgeTrashDoc(key){
+  if(!await confirmDialog({title:'Kalıcı Sil',message:'Bu belge KALICI olarak silinecek, bir daha geri alınamaz.',danger:true,okText:'Kalıcı Sil'})) return;
+  try{
+    const ref=_db.ref(`${TENANT_ROOT}/trash/${key}`);
+    const snap=await ref.once('value');
+    const it=snap.exists()?snap.val():null;
+    try{ if(it&&it.path&&_storage) await _storage.ref(it.path).delete(); }catch(e){}
+    await ref.remove();
+    toast('🗑️ Kalıcı silindi');
+    openTrashBin();
+  }catch(e){ toast('❌ '+e.message,5000); }
+}
+
 /* Yedekleme yönetim ekranı (süper admin) — katmanlı geri yükleme */
 function openBackupManager(){
   const body=document.getElementById('gmodal-body');
@@ -4656,11 +4833,12 @@ function openBackupManager(){
   const companyOpts=S.companies.map(c=>`<option value="${c.id}">${safe(c.name)}</option>`).join('');
   body.innerHTML=`
     <p style="font-size:12.5px;color:var(--txt2);line-height:1.5;margin-bottom:14px">
-      Sistem her gün TR saati <b>03:00</b>'te otomatik yedeklenir (son ${MAX_BACKUPS} yedek saklanır). Aşağıdan şirket, mahal veya üye bazında tek tek geri yükleyebilirsiniz.
+      Sistem her gün <b>03:00</b> sonrası ilk girişte otomatik yedeklenir (son ${MAX_BACKUPS} yedek saklanır); ayrıca her şirketin verisi, o şirkete o gün ilk giren kullanıcıyla günlük yedeklenir. Silinen <b>belgeler (dosyalar)</b> ${TRASH_DAYS} gün çöp kutusunda tutulur — yedeğe dönünce dosyalar da yerinde olur.
     </p>
-    <p class="sec-label" style="margin-bottom:8px">Manuel Yedek</p>
+    <p class="sec-label" style="margin-bottom:8px">Manuel Yedek & Çöp</p>
     <div class="ed-card" style="margin-bottom:14px">
-      <button class="btn btn-primary btn-full btn-sm" onclick="manualBackupSystem()">📦 Şimdi Tam Yedek Al</button>
+      <button class="btn btn-primary btn-full btn-sm" style="margin-bottom:8px" onclick="manualBackupSystem()">📦 Şimdi Tam Yedek Al</button>
+      <button class="btn btn-secondary btn-full btn-sm" onclick="openTrashBin()">🗑️ Çöp Kutusu (silinen belgeler)</button>
     </div>
     <p class="sec-label" style="margin-bottom:8px">Katmanlı Geri Yükleme</p>
     <div class="ed-card">
@@ -5479,12 +5657,12 @@ async function initApp(){
       if(saved.activeCompanyId && S.companies.find(c=>c.id===saved.activeCompanyId)){
         try{
           await enterCompany(saved.activeCompanyId);
-          setTimeout(()=>autoBackupIfNeeded(), 3000);
+          setTimeout(()=>{ autoBackupIfNeeded(); purgeTrashIfNeeded(); }, 3000);
           return;
         }catch(e){ /* başarısızsa şirketler ekranına düş */ }
       }
       renderCompaniesScreen();
-      setTimeout(()=>autoBackupIfNeeded(), 3000);
+      setTimeout(()=>{ autoBackupIfNeeded(); purgeTrashIfNeeded(); }, 3000);
       return;
     } else if(saved.companyId){
       // Normal kullanıcı → şirketine bağlan
@@ -5621,7 +5799,7 @@ async function doLogin(){
     document.getElementById('login-screen').style.display='none';
     renderCompaniesScreen();
     // Otomatik yedekleme (günlük, arka planda)
-    setTimeout(()=>autoBackupIfNeeded(), 3000);
+    setTimeout(()=>{ autoBackupIfNeeded(); purgeTrashIfNeeded(); }, 3000);
     return;
   }
 
@@ -6865,13 +7043,10 @@ async function toggleDocPin(docId){
 async function deleteEquipDoc(docId){
   const e=equipById(S.activeEquipId); if(!e) return;
   const d=(e.documents||[]).find(x=>x.id===docId); if(!d) return;
-  if(!await confirmDialog({title:'Belge Silinsin mi?',message:`"${safe(d.name)}" kalıcı olarak silinecek.`,danger:true,okText:'Sil'})) return;
+  if(!await confirmDialog({title:'Belge Silinsin mi?',message:`"${safe(d.name)}" silinecek (30 gün çöpte geri alınabilir).`,danger:true,okText:'Sil'})) return;
   try{
-    // Storage'dan sil (başarısız olsa bile kayıttan kaldır)
-    if(_storageReady && d.path){
-      try{ await _storage.ref(d.path).delete(); }
-      catch(err){ console.warn('Storage silme hatası (kayıttan yine de kaldırılıyor):', err.code||err.message); }
-    }
+    // Storage'dan HEMEN silme — çöp kutusuna taşı (30 gün geri alınabilir)
+    await trashDoc(d, 'Ekipman: '+(e.name||''));
     e.documents=e.documents.filter(x=>x.id!==docId);
     await save(); renderEquipDetail(); toast('🗑️ Belge silindi');
   }catch(err){ toast('❌ Silinemedi: '+(err.message||'')); }
@@ -8991,8 +9166,8 @@ function openDashboard(){
 
 // Dashboard'da gösterilecek kartlar (kullanıcı seçebilir, sessionStorage'da)
 function getDashCards(){
-  try{ const v=sessionStorage.getItem('te_dash'); return v?JSON.parse(v):['summary','byCat','byMahal','topFail','timeline','due']; }
-  catch{ return ['summary','byCat','byMahal','topFail','timeline','due']; }
+  try{ const v=sessionStorage.getItem('te_dash'); return v?JSON.parse(v):['summary','byCat','byMahal','topFail','timeline','due','workorders']; }
+  catch{ return ['summary','byCat','byMahal','topFail','timeline','due','workorders']; }
 }
 function setDashCards(arr){ try{ sessionStorage.setItem('te_dash',JSON.stringify(arr)); }catch(e){} }
 
@@ -9020,6 +9195,7 @@ function renderDashboard(){
     {id:'topFail',  label:'⚠️ En Sorunlu Ekipmanlar'},
     {id:'timeline', label:'📈 Aylık Denetim Trendi'},
     {id:'due',      label:'⏰ Denetim Bekleyenler'},
+    {id:'workorders', label:'🗂️ Açık İş Emirleri'},
   ];
 
   let html=`<button class="page-back-btn" onclick="goBack()">← Geri</button>
@@ -9161,6 +9337,22 @@ function renderDashboard(){
         <div style="flex:1"><div style="font-size:13px;font-weight:600">${safe(e.name)}</div>
         <div style="font-size:11px;color:var(--txt3)">${mahalById(e.mahalId)?.name||''}</div></div>
         <span style="font-size:12px">${lbl}</span>
+      </div>`;
+    });
+    html+=`</div>`;
+  }
+
+  // WORK ORDERS (açık iş emirleri)
+  if(active.includes('workorders')){
+    const open=(S.workOrders||[]).filter(w=>w.status!=='approved').sort((a,b)=>(b.ts||0)-(a.ts||0));
+    html+=`<div class="ed-card" style="margin-bottom:14px"><p class="sec-label" style="margin-top:0">Açık İş Emirleri (${open.length})</p>`;
+    if(!open.length) html+=`<p style="font-size:13px;color:var(--gtxt);padding:8px 0">✅ Açık iş emri yok.</p>`;
+    else open.slice(0,8).forEach(w=>{
+      const names=(w.assignees||[]).map(id=>{ const u=userById(id); return u?(u.fullname||u.username):'?'; }).join(', ');
+      html+=`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--brd);cursor:pointer" onclick="openWorkOrderDetail('${w.id}')">
+        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${safe(w.title)}</div>
+        <div style="font-size:11px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${names?('👤 '+safe(names)):'atanmadı'} · ${w.createdAt||''}</div></div>
+        ${woStatusBadge(w.status)}
       </div>`;
     });
     html+=`</div>`;
