@@ -149,8 +149,9 @@ Storage:
 ## 8. BİLİNEN PLATFORM/MİMARİ SINIRLARI
 - Android PWA status bar siyah — ÇÖZÜLEMEZ (platform sınırı).
 - iOS PWA localStorage bazen temizlenir.
-- Gerçek push bildirimi YOK (uygulama-içi bildirim var).
-- Otomatik yedek tam 03:00'te çalışamaz (PWA, sunucu değil) — 03:00 sonrası ilk süper admin girişinde alınır. Gerçek zamanlı yedek için Cloud Function gerekir (gelecek iş).
+- Gerçek push bildirimi YOK (uygulama-içi bildirim var; FCM Faz 3'te).
+- ~~Otomatik yedek sınırı~~ ÇÖZÜLDÜ (2026-07-02): `dailyMaintenance` Cloud Function her gece 03:05 TR'de sunucuda yedek alır + çöpü temizler; istemci tetikleyicileri yedek (fallback) olarak durur.
+- **GÜVENLİK (2026-07-02):** Giriş `login` Cloud Function ile (custom token: cid/isSuper claims); DB kuralları `database.rules.json` — tenant izolasyonu AKTİF (bir şirket diğerini okuyamaz). Deploy: `firebase deploy --only functions|database` (GOOGLE_APPLICATION_CREDENTIALS user env'de, anahtar repo DIŞI: C:\Users\canko\.firebase-keys\). Kural değişikliğinde dosyayı düzenle + deploy et; konsoldan elle değiştirme.
 - Eşzamanlı yazma %100 kusursuzluk gerçek backend + transaction gerektirir (kullanıcı "sıkıntı yok" dedi, şimdilik atlandı).
 
 ---
