@@ -358,20 +358,48 @@ async function doLogin(){
 
   if(btn){ btn.disabled=true; btn.textContent='Kontrol ediliyor…'; }
 
-  if(uname===SUPER_USERNAME){
-    const su=await getSuperAdmin();
-    if(su){ user=su; isSuperLogin=true; }
-  } else {
-    // 2) Normal kullanıcı: tüm şirketlerde ara
-    const found=await findUserAcrossCompanies(uname);
-    if(found){ user=found.user; loginCompanyId=found.companyId; }
+  // ── 0) GÜVENLİ BULUT GİRİŞİ (FAZ 2) ──
+  // Cloud Function kullanıcıyı SUNUCUDA arar+doğrular, özel token döner.
+  // Fonksiyona ulaşılamazsa (ağ/deploy) eski yerel yönteme düşer — kimse dışarıda kalmaz.
+  let cloudDone=false;
+  if(_fns){
+    try{
+      const res=await _fns.httpsCallable('login')({ username:uname, password:pass });
+      const d=res&&res.data;
+      if(d&&d.token){
+        try{ await firebase.auth(firebase.app('takipet')).signInWithCustomToken(d.token); }
+        catch(e){ console.warn('Özel token girişi:', e.message); }
+        user=d.user; loginCompanyId=d.companyId||null; isSuperLogin=!!d.isSuper;
+        cloudDone=true;
+      }
+    }catch(e){
+      const code=String((e&&e.code)||'');
+      if(code.includes('unauthenticated')){
+        // Sunucu 'kullanıcı adı/şifre hatalı' dedi — yerel fallback DENENMEZ (güvenlik)
+        if(btn){ btn.disabled=false; btn.textContent='Giriş Yap →'; } fail(); return;
+      }
+      if(code.includes('resource-exhausted')){
+        if(btn){ btn.disabled=false; btn.textContent='Giriş Yap →'; }
+        err.textContent=e.message||'Çok fazla hatalı deneme. Biraz bekleyin.'; err.classList.add('show'); return;
+      }
+      console.warn('Bulut girişi kullanılamadı, yerel yönteme dönülüyor:', code||e.message);
+    }
   }
 
-  if(!user){ if(btn){ btn.disabled=false; btn.textContent='Giriş Yap →'; } fail(); return; }
-
-  const ok = await verifyPassword(pass, user);
+  if(!cloudDone){
+    if(uname===SUPER_USERNAME){
+      const su=await getSuperAdmin();
+      if(su){ user=su; isSuperLogin=true; }
+    } else {
+      // Normal kullanıcı: tüm şirketlerde ara (eski yöntem — bulut kapalıysa)
+      const found=await findUserAcrossCompanies(uname);
+      if(found){ user=found.user; loginCompanyId=found.companyId; }
+    }
+    if(!user){ if(btn){ btn.disabled=false; btn.textContent='Giriş Yap →'; } fail(); return; }
+    const ok = await verifyPassword(pass, user);
+    if(!ok){ if(btn){ btn.disabled=false; btn.textContent='Giriş Yap →'; } fail(); return; }
+  }
   if(btn){ btn.disabled=false; btn.textContent='Giriş Yap →'; }
-  if(!ok){ fail(); return; }
 
   // Başarılı — kilidi sıfırla
   setLoginLock({fails:0,until:0});
@@ -419,6 +447,11 @@ function doLogout(reason){
   S.cur=null; clearSession();
   stopSessionTimer();
   detachCompanyData();
+  // Firebase oturumunu anonime döndür (özel token'lı oturum cihazda kalmasın)
+  try{
+    const a=firebase.auth(firebase.app('takipet'));
+    if(a.currentUser && !a.currentUser.isAnonymous){ a.signOut().then(()=>a.signInAnonymously()).catch(()=>{}); }
+  }catch(e){}
   const cs=document.getElementById('companies-screen'); if(cs) cs.style.display='none';
   document.getElementById('app').style.display='none';
   document.getElementById('login-screen').style.display='flex';

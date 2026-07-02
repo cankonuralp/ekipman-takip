@@ -16,7 +16,8 @@ let _docSelected=new Set();      // Seçili belgeler "folderId::docId"
 let _gdocSearch='';              // Genel evraklar arama sorgusu
 let _listener=null;
 let _fbConnected=false;   // Firebase sunucu bağlantısı var mı
-let _authReady=false;     // Anonim kimlik alındı mı (güvenlik)
+let _authReady=false;     // Kimlik alındı mı (güvenlik)
+let _fns=null;            // Cloud Functions (europe-west1) — güvenli giriş
 let _pendingWrites=0;     // gönderilmeyi bekleyen yazma sayısı
 let _syncing=false;       // şu an senkron oluyor mu
 
@@ -47,16 +48,17 @@ async function initFirebase(){
     const app = firebase.initializeApp(FIREBASE_CONFIG, 'takipet');
     try{ firebase.appCheck(app).activate(APP_CHECK_KEY, true); }catch(e){}
 
-    // ── GÜVENLİK: Anonim kimlik doğrulama ──
-    // Her cihaz arka planda Firebase kimliği alır. Rules "sadece kimliği doğrulanmış
-    // istekler" diyebilir → F12 ile doğrudan DB erişimi + dışarıdan saldırı kapanır.
+    // ── GÜVENLİK: Kimlik doğrulama ──
+    // Önce Firebase'in KENDİ oturumu geri gelsin diye bekle (custom token girişi
+    // F5 sonrası otomatik korunur). Oturum yoksa anonim kimlik al (girişsiz QR vb.).
     try{
       const auth = firebase.auth(app);
-      await auth.signInAnonymously();
+      await new Promise(res=>{ const un=auth.onAuthStateChanged(u=>{ un(); res(u); }); });
+      if(!auth.currentUser){ await auth.signInAnonymously(); }
       _authReady = true;
     }catch(e){
       // Auth başarısızsa (Console'da Anonymous açık değilse) uygulama yine çalışsın
-      console.warn('Anonim kimlik alınamadı:', e.message);
+      console.warn('Kimlik alınamadı:', e.message);
     }
 
     _db  = firebase.database(app);
@@ -66,6 +68,9 @@ async function initFirebase(){
 
     // Firebase Storage (belge arşivi) — varsa bağla
     try{ _storage = firebase.storage(app); _storageReady = true; }catch(e){ console.warn('Storage başlatılamadı:', e.message); }
+
+    // Cloud Functions (güvenli giriş) — europe-west1
+    try{ _fns = app.functions('europe-west1'); }catch(e){ console.warn('Functions başlatılamadı:', e.message); }
 
     // Çevrimdışı dayanıklılık (şirket kataloğu)
     try{ _companiesRef.keepSynced(true); }catch(e){}
@@ -705,6 +710,11 @@ function globalNav(which){
 function superAdminLogout(){
   S.cur=null; clearSession(); stopSessionTimer();
   detachCompanyData();
+  // Firebase oturumunu anonime döndür (özel token'lı oturum cihazda kalmasın)
+  try{
+    const a=firebase.auth(firebase.app('takipet'));
+    if(a.currentUser && !a.currentUser.isAnonymous){ a.signOut().then(()=>a.signInAnonymously()).catch(()=>{}); }
+  }catch(e){}
   document.getElementById('companies-screen').style.display='none';
   document.getElementById('app').style.display='none';
   document.getElementById('login-screen').style.display='flex';
