@@ -64,6 +64,10 @@
       "trash": {
         ".read": "auth != null && auth.token.isSuper === true",
         ".write": "auth != null && (auth.token.isSuper === true || auth.token.cid != null)"
+      },
+      "members": {
+        ".read": "auth != null && auth.token.isSuper === true",
+        ".write": "auth != null && auth.token.isSuper === true"
       }
     }
   }

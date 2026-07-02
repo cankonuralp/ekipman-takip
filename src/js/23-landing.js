@@ -94,21 +94,84 @@ function renderLanding(){
   }
 }
 
-/* Plan seçimi — Parça 2'de gerçek kayıt akışına bağlanacak.
-   Şimdilik kullanıcıyı bilgilendirir (sistem bozulmadan). */
+/* ══ ÜYE OL AKIŞI (Parça 2) — plan seç → form → sunucu hesabı açar → otomatik giriş ══ */
 function startSignup(planId){
-  const cfg=getLandingConfig();
-  const plan=(cfg.plans||[]).find(p=>p.id===planId);
   if(planId==='kurumsal'){ lndScroll('lnd-contact'); return; }
-  const mail=(S.contactInfo?.mail||CONTACT_EMAIL||'').trim();
-  const body=`<div style="padding:6px 2px">
-    <div style="text-align:center;font-size:40px;margin-bottom:8px">🎉</div>
-    <p style="font-size:15px;font-weight:700;color:var(--txt);text-align:center;margin-bottom:8px">${plan?safe(plan.name)+' planı':'Üyelik'} — çok yakında!</p>
-    <p style="font-size:13.5px;color:var(--txt2);line-height:1.6;text-align:center;margin-bottom:18px">
-      Online üye olma sistemi hazırlanıyor. Hemen başlamak isterseniz bizimle iletişime geçin, hesabınızı biz açalım.</p>
-    ${mail?`<a class="btn btn-primary btn-full" style="text-decoration:none;margin-bottom:8px" href="mailto:${safe(mail)}?subject=${encodeURIComponent('TakipEt '+(plan?plan.name:'')+' Üyelik Talebi')}">✉️ Üyelik İçin Yaz</a>`:''}
-    <button class="btn btn-secondary btn-full" onclick="closeModal('gmodal');showLogin()">Zaten üyeyim, giriş yap</button>
-  </div>`;
-  const gb=document.getElementById('gmodal-body');
-  if(gb){ document.getElementById('gmodal-title').textContent='Üyelik'; gb.innerHTML=body; openModal('gmodal'); }
+  openSignupModal(planId);
+}
+
+function openSignupModal(planId){
+  const cfg=getLandingConfig();
+  const plan=(cfg.plans||[]).find(p=>p.id===planId)||{name:planId};
+  const gb=document.getElementById('gmodal-body'); if(!gb) return;
+  document.getElementById('gmodal-title').textContent='🚀 Üye Ol — '+(plan.name||'');
+  gb.innerHTML=`
+    ${planId==='grup'?`<p style="font-size:12.5px;color:var(--txt2);line-height:1.5;background:var(--bg2);border-radius:10px;padding:10px 12px;margin-bottom:14px">Grup üyeliğinde ilk şirketinizle başlarsınız; çoklu şirket paneli hesabınıza eklenecek.</p>`:''}
+    <div class="form-group"><label class="form-label">FİRMA / İŞLETME ADI</label>
+      <input class="form-input" id="su-company" placeholder="örn: Miray Otel" autocomplete="organization"/></div>
+    <div class="form-group"><label class="form-label">AD SOYAD</label>
+      <input class="form-input" id="su-fullname" placeholder="örn: Can Konuralp" autocomplete="name"/></div>
+    <div class="form-group"><label class="form-label">E-POSTA</label>
+      <input class="form-input" id="su-email" type="email" placeholder="ornek@firma.com" autocomplete="email"/></div>
+    <div class="form-group"><label class="form-label">KULLANICI ADI</label>
+      <input class="form-input" id="su-username" placeholder="giriş için kullanacaksınız" autocomplete="username"/></div>
+    <div class="form-group"><label class="form-label">ŞİFRE</label>
+      <div class="pw-wrap"><input class="form-input" id="su-pass" type="password" placeholder="En az 8 karakter, harf+rakam" autocomplete="new-password"/><button type="button" class="pw-toggle" data-pw="su-pass" aria-label="Şifreyi göster"></button></div></div>
+    <div class="form-group"><label class="form-label">ŞİFRE (TEKRAR)</label>
+      <input class="form-input" id="su-pass2" type="password" autocomplete="new-password"/></div>
+    <p class="login-error" id="su-error" style="display:none"></p>
+    <button class="btn btn-primary btn-full" id="su-submit" onclick="doSignup('${planId}')" style="margin-top:6px">✅ Hesabımı Oluştur</button>
+    <p style="font-size:11.5px;color:var(--txt3);text-align:center;margin-top:10px">Hesabınız anında açılır, panele otomatik girersiniz.</p>`;
+  // Göz ikonunu statik giriş ekranındakinden kopyala (delegation tıklamayı zaten yakalar)
+  const srcT=document.querySelector('.pw-toggle[data-pw="login-pass"]');
+  if(srcT) gb.querySelectorAll('.pw-toggle').forEach(b=>{ b.innerHTML=srcT.innerHTML; });
+  openModal('gmodal');
+  setTimeout(()=>{ document.getElementById('su-company')?.focus(); }, 80);
+}
+
+function suError(msg){
+  const el=document.getElementById('su-error');
+  if(el){ el.textContent=msg; el.style.display='block'; el.classList.add('show'); }
+}
+
+async function doSignup(planId){
+  const val=id=>(document.getElementById(id)?.value||'').trim();
+  const companyName=val('su-company'), fullname=val('su-fullname'), email=val('su-email'), username=val('su-username');
+  const pass=document.getElementById('su-pass')?.value||'';
+  const pass2=document.getElementById('su-pass2')?.value||'';
+  const err=document.getElementById('su-error'); if(err) err.style.display='none';
+  // Yerel ön kontroller (sunucu yine de doğrular)
+  if(companyName.length<2) return suError('Firma adı en az 2 karakter olmalı');
+  if(fullname.length<2) return suError('Ad soyad girin');
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return suError('Geçerli bir e-posta adresi girin');
+  if(!/^[a-zA-Z0-9_.-]{3,30}$/.test(username)) return suError('Kullanıcı adı 3-30 karakter olmalı (harf, rakam, . _ -)');
+  const pwErr=checkPasswordStrength(pass); if(pwErr) return suError(pwErr);
+  if(pass!==pass2) return suError('Şifreler birbiriyle aynı değil');
+  if(!_fns) return suError('Bağlantı hazır değil — sayfayı yenileyip tekrar deneyin');
+
+  const btn=document.getElementById('su-submit');
+  if(btn){ btn.disabled=true; btn.textContent='Hesabınız oluşturuluyor…'; }
+  try{
+    const res=await _fns.httpsCallable('signup')({ plan:planId, companyName, fullname, email, username, password:pass });
+    const d=res&&res.data;
+    if(!d||!d.token) throw new Error('Sunucudan geçersiz cevap');
+    // Otomatik giriş — normal kullanıcı giriş akışının aynısı
+    try{ await firebase.auth(firebase.app('takipet')).signInWithCustomToken(d.token); }catch(e){ console.warn('signup token:', e.message); }
+    try{ attachCompaniesListener(); }catch(e){}
+    S.cur=d.user; S.cur.companyId=d.companyId;
+    setSession(S.cur);
+    startSessionTimer();
+    closeModal('gmodal');
+    const l=document.getElementById('landing-screen'); if(l) l.style.display='none';
+    document.getElementById('login-screen').style.display='none';
+    showLoading(true);
+    await bindCompanyData(d.companyId);
+    await new Promise(r=>setTimeout(r,500));
+    showLoading(false);
+    bootApp();
+    toast('🎉 Hoş geldiniz! Hesabınız hazır — ilk mahalinizi ekleyerek başlayın.', 6000);
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent='✅ Hesabımı Oluştur'; }
+    suError(e.message||'Kayıt başarısız — tekrar deneyin');
+  }
 }

@@ -111,6 +111,80 @@ exports.login = onCall({ enforceAppCheck: false }, async (req) => {
   throw new HttpsError('unauthenticated', 'Kullanıcı adı veya şifre hatalı');
 });
 
+/* ══ 1b) ÜYE OL (signup) ══
+   İstek: { plan:'tekil'|'grup', companyName, fullname, email, username, password }
+   Yapar: benzersizlik kontrolleri → şirket + admin kullanıcı + üyelik kaydı → otomatik giriş token'ı
+   Cevap: { token, user, companyId, mid, plan }                                          */
+function slugifyTr(s){
+  return String(s||'').toLowerCase()
+    .replace(/ç/g,'c').replace(/ğ/g,'g').replace(/ı/g,'i').replace(/ö/g,'o').replace(/ş/g,'s').replace(/ü/g,'u')
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40);
+}
+
+exports.signup = onCall({ enforceAppCheck: false }, async (req) => {
+  const plan        = String(req.data?.plan||'').trim();
+  const companyName = String(req.data?.companyName||'').trim();
+  const fullname    = String(req.data?.fullname||'').trim();
+  const email       = String(req.data?.email||'').trim().toLowerCase();
+  const username    = String(req.data?.username||'').trim();
+  const password    = String(req.data?.password||'');
+
+  // ── Doğrulamalar (istemcideki kurallarla aynı) ──
+  if (!['tekil','grup'].includes(plan)) throw new HttpsError('invalid-argument','Geçersiz plan');
+  if (companyName.length < 2) throw new HttpsError('invalid-argument','Firma adı en az 2 karakter olmalı');
+  if (fullname.length < 2) throw new HttpsError('invalid-argument','Ad soyad gerekli');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new HttpsError('invalid-argument','Geçerli bir e-posta adresi girin');
+  if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(username)) throw new HttpsError('invalid-argument','Kullanıcı adı 3-30 karakter olmalı (harf, rakam, . _ -)');
+  if (password.length < 8 || !/[a-zA-ZçğıöşüÇĞİÖŞÜ]/.test(password) || !/[0-9]/.test(password))
+    throw new HttpsError('invalid-argument','Şifre en az 8 karakter olmalı, harf ve rakam içermeli');
+
+  // ── IP bazlı kayıt limiti: saatte 3 ──
+  const ip = String((req.rawRequest && (req.rawRequest.headers['x-forwarded-for'] || req.rawRequest.ip)) || '?').split(',')[0].trim();
+  const gRef = db().ref(`${TENANT_ROOT}/signupGuard/${sha256hex('signup::'+ip).slice(0,32)}`);
+  const gSnap = await gRef.once('value');
+  let g = gSnap.exists() ? gSnap.val() : { count:0, resetAt:0 };
+  if ((g.resetAt||0) < Date.now()) g = { count:0, resetAt: Date.now()+3600000 };
+  if (g.count >= 3) throw new HttpsError('resource-exhausted','Çok fazla kayıt denemesi yapıldı. Lütfen bir süre sonra tekrar deneyin.');
+
+  // ── Kullanıcı adı TÜM sistemde benzersiz olmalı ──
+  const suSnap = await db().ref(`${TENANT_ROOT}/superadmin`).once('value');
+  if (suSnap.exists() && suSnap.val().username === username) throw new HttpsError('already-exists','Bu kullanıcı adı alınmış — başka bir tane deneyin');
+  const compSnap = await db().ref(`${TENANT_ROOT}/companies`).once('value');
+  const companies = compSnap.exists() ? Object.values(compSnap.val()) : [];
+  for (const c of companies) {
+    if (!c || !c.id) continue;
+    const uSnap = await db().ref(`${TENANT_ROOT}/data/${c.id}/users`).once('value');
+    const users = toArr(uSnap.exists() ? uSnap.val() : []);
+    if (users.some(u => u && u.username === username)) throw new HttpsError('already-exists','Bu kullanıcı adı alınmış — başka bir tane deneyin');
+  }
+
+  // ── Benzersiz şirket id'si ──
+  let base = slugifyTr(companyName) || ('sirket'+Date.now());
+  let cid = base, n = 1;
+  while (companies.some(c => c && c.id === cid)) cid = base + '-' + (++n);
+
+  // ── Kayıtlar: şirket + admin kullanıcı + üyelik ──
+  const now = Date.now();
+  const at = nowStrTR();
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = sha256hex(salt + '::' + password);
+  const uid = 'u' + now.toString(36);
+  const mid = 'm' + now.toString(36) + Math.random().toString(36).slice(2,6);
+  const adminUser = { id:uid, username, fullname, role:'admin', email, pwSalt:salt, pwHash:hash, createdAt:at, mustChangePw:false, memberOwner:true, mid };
+
+  await db().ref(`${TENANT_ROOT}/companies/${cid}`).set({ id:cid, name:companyName, createdAt:at, createdTs:now, active:true, mid, plan });
+  await db().ref(`${TENANT_ROOT}/data/${cid}/users`).set([adminUser]);
+  await db().ref(`${TENANT_ROOT}/members/${mid}`).set({
+    id:mid, plan, name:companyName, ownerUsername:username, ownerUid:uid, email,
+    companies:{ [cid]:true }, status:'active', createdAt:at, ts:now
+  });
+  g.count = (g.count||0) + 1; await gRef.set(g);
+
+  const token = await admin.auth().createCustomToken(`${cid}__${uid}`.slice(0,128), { isSuper:false, cid, role:'admin', mid, plan });
+  console.log(`[signup] ${plan} üyelik: "${companyName}" (${cid}) — ${username}`);
+  return { token, user:sanitizeUser(adminUser), companyId:cid, isSuper:false, mid, plan };
+});
+
 /* ══ 2) GECE BAKIMI — her gün 03:05 TR ══
    - Sistem yedeği (backups hariç tam kopya) → backups/system (son 5)
    - Her şirketin yedeği → backups/company/{cid} (son 5)
